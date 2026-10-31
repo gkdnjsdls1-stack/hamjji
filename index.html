@@ -1,0 +1,3565 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>햄찌랑 전국일주</title>
+</head>
+<body>
+<title>햄찌랑 전국일주</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
+<style>
+  /* 아티팩트는 이 두 줄을 알아서 넣어주지만 게임-바로열기.html 은 아닙니다.
+     여기 적어 두면 두 곳에서 같게 보입니다.
+     [hidden] 에 !important 가 붙은 이유: 아래 .work/.night/.pad>section 의 display:flex 가
+     브라우저 기본값 [hidden]{display:none} 을 이겨버립니다. */
+  *,*::before,*::after{box-sizing:border-box}
+  [hidden]{display:none !important}
+
+  /* Layout: one-screen app — thin status bar, scrolling play area, three bottom tabs */
+  :root{
+    --bg:#EDF5F2; --surface:#FFFFFF; --surface-2:#F5FAF8; --sunk:#E3EFEA;
+    --ink:#2C3A35; --ink-soft:#6E8279;
+    --line:#D7E6E0;
+    --coral:#DD7C65; --sage:#5FA78F; --sun:#E5AE49; --sky:#7AACC8;
+    --shadow:0 2px 0 rgba(44,58,53,.10);
+    --fur:#E9C9A2; --fur-light:#F8E8D4; --fur-dark:#D7B087; --face:#5A463A; --blush:#F0AFA2;
+    --bag-r:#DD6B6B; --bag-b:#5B8FD6; --bag-y:#E8B043;
+    --font-display:'Jua', system-ui, sans-serif;
+    --font-body:'Gowun Dodum', system-ui, sans-serif;
+    color-scheme:light;
+  }
+  /* 룩은 밝은 낮 한 가지로 고정합니다. 다크 모드를 두지 않는 이유:
+     AI로 뽑은 그림은 색이 박혀 있어 테마를 따라갈 수 없고,
+     UI만 어두워지면 그림과 반드시 어긋나기 때문입니다. */
+
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:var(--font-body); font-size:17px; line-height:1.5;
+    -webkit-tap-highlight-color:transparent;
+    /* 한글은 기본값(normal)이면 어절 한가운데서 줄이 바뀝니다. 320px 에서 세어 보니
+       "전/주", "비빔밥집에/서", "다시 가/는" 처럼 270 군데가 쪼개졌습니다.
+       글자를 막 뗀 2학년한테는 다른 낱말로 보입니다. keep-all 은 띄어쓰기에서만
+       줄을 바꿉니다 — 넣어도 320px 에서 넘치는 곳은 그대로 0 입니다. */
+    word-break:keep-all;
+  }
+  .app{height:100%; display:flex; flex-direction:column; max-width:560px; margin:0 auto}
+
+  /* status bar */
+  .status{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding-block:10px;
+    padding-left:max(16px, env(safe-area-inset-left, 0px));
+    padding-right:max(16px, env(safe-area-inset-right, 0px));
+    background:var(--surface); border-bottom:1px solid var(--line);
+  }
+  .coin{font-family:var(--font-display); font-size:20px; color:var(--ink); font-variant-numeric:tabular-nums}
+  .status .sep{color:var(--line)}
+  .status .meta{color:var(--ink-soft); font-size:15px}
+  .status .right{margin-left:auto; color:var(--ink-soft); font-size:15px}
+
+  /* play area */
+  .stage{flex:1; min-height:0; overflow-y:auto; overflow-x:hidden}
+  .pad{
+    padding-block:18px 26px;
+    padding-left:max(16px, env(safe-area-inset-left, 0px));
+    padding-right:max(16px, env(safe-area-inset-right, 0px));
+    display:flex; flex-direction:column; gap:16px;
+  }
+
+  /* 한 화면 안의 덩이들도 같은 간격으로 */
+  .pad > section{display:flex; flex-direction:column; gap:14px}
+  h2{font-family:var(--font-display); font-size:22px; margin:0; text-wrap:balance; font-weight:400}
+  .hint{color:var(--ink-soft); font-size:15px; margin:0}
+
+  /* hamster room */
+  .room{
+    background:var(--surface); border:1px solid var(--line); border-radius:22px;
+    padding:14px 14px 6px; display:flex; flex-direction:column; align-items:center; gap:6px;
+  }
+  .bubble{
+    font-family:var(--font-display); font-size:19px;
+    background:var(--sunk); color:var(--ink);
+    padding:7px 16px; border-radius:16px; position:relative; min-height:34px;
+  }
+  .bubble::after{
+    content:''; position:absolute; left:50%; bottom:-7px; transform:translateX(-50%);
+    border-left:8px solid transparent; border-right:8px solid transparent;
+    border-top:8px solid var(--sunk);
+  }
+  /* 아트 슬롯 — 상자 크기는 코드가 잡고, 안에 든 그림만 갈아끼웁니다 */
+  .art{display:inline-block; max-width:100%; line-height:0}
+  .art > svg, .art > img{width:100%; height:100%; display:block}
+  .art.bounce{animation:bounce .5s ease-in-out}
+  @keyframes bounce{0%,100%{transform:translateY(0)}35%{transform:translateY(-10px)}}
+
+  /* 상반신만 보이기 — 같은 그림의 위쪽을 잘라 씁니다 */
+  .art.half{overflow:hidden}
+  .art.half > svg, .art.half > img{width:100%; height:auto}
+
+  /* 나 */
+  .room-floor{display:flex; align-items:flex-end; justify-content:center; gap:4px; width:100%}
+  .room-floor > div{min-width:0; flex:0 1 auto}
+  .me{display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--line);
+      border-radius:20px; padding:10px 14px; box-shadow:var(--shadow)}
+  .me .who{flex:1; min-width:0}
+  .me .who b{font-family:var(--font-display); font-weight:400; font-size:18px; display:block}
+  .me .who span{color:var(--ink-soft); font-size:14px}
+  .rider{position:absolute; left:10px; bottom:0; width:76px}
+
+  /* 옷장 */
+  .wardrobe{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+  .wear{background:var(--surface-2); border:1px solid var(--line); border-radius:16px; padding:8px 6px;
+        display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer; min-width:0;
+        font-family:var(--font-body); font-size:13px; color:var(--ink); text-align:center}
+  .wear b{font-family:var(--font-display); font-weight:400; font-size:14px}
+  .wear.on{border-color:var(--sage); border-width:2px; padding:7px 5px}
+  .wear.off{opacity:.5; cursor:default}
+  .wear .where{color:var(--ink-soft); font-size:12px}
+  .wear:focus-visible{outline:3px solid var(--sun); outline-offset:2px}
+
+  /* 내 집 */
+  .room-box{position:relative; border-radius:18px; overflow:hidden; border:1px solid var(--line); box-shadow:var(--shadow)}
+  .room-floorband{position:absolute; left:0; right:0; bottom:0; height:42%}
+  .room-grid{position:relative; display:grid; grid-template-columns:repeat(6,1fr); aspect-ratio:6 / 4}
+  .cellbox{display:flex; align-items:center; justify-content:center; cursor:pointer;
+           border:none; background:none; padding:2px; min-width:0}
+  .cellbox.open{border-radius:9px; outline:2px dashed rgba(255,255,255,0.7); outline-offset:-4px}
+  .cellbox:focus-visible{outline:3px solid var(--sun); outline-offset:-3px}
+  .tray{display:flex; flex-wrap:wrap; gap:8px}
+  .tray button{background:var(--surface); border:2px solid var(--line); border-radius:14px; padding:6px 8px 4px;
+               display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; min-width:66px;
+               font-family:var(--font-body); font-size:12px; color:var(--ink-soft)}
+  .tray button[aria-pressed="true"]{border-color:var(--sage); background:var(--sunk); color:var(--ink)}
+  .tray button:focus-visible{outline:3px solid var(--sun); outline-offset:2px}
+  .swatches{display:flex; gap:8px; flex-wrap:wrap}
+  .sw{width:40px; height:40px; border-radius:12px; border:2px solid var(--line); cursor:pointer; padding:0}
+  .sw[aria-pressed="true"]{border-color:var(--sage); border-width:3px}
+  .sw:focus-visible{outline:3px solid var(--sun); outline-offset:2px}
+  .signbox{font-family:var(--font-display); font-size:18px; text-align:center; color:var(--ink);
+           background:var(--surface); border:2px solid var(--line); border-radius:14px; padding:10px; width:100%}
+  .signbox:focus{outline:none; border-color:var(--sage)}
+  .lab{display:block; font-family:var(--font-display); font-size:16px; margin:0; color:var(--ink-soft)}
+
+  /* 놀기 — 작은 버튼 한 줄 */
+  .playrow{display:flex; gap:8px}
+  .playrow button{
+    flex:1 1 0; min-width:0; background:var(--surface); border:1px solid var(--line);
+    border-radius:14px; padding:9px 4px; cursor:pointer; min-height:48px; box-shadow:var(--shadow);
+    font-family:var(--font-display); font-size:14px; color:var(--ink);
+  }
+  .playrow button:active{transform:translateY(2px); box-shadow:none}
+  .playrow button:focus-visible{outline:3px solid var(--sun); outline-offset:2px}
+
+  /* 오늘 할 일 — 가로 한 줄 */
+  .todo{background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:12px 10px;
+        display:flex; flex-direction:row; gap:6px}
+  .todo-row{flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px;
+            font-size:13px; text-align:center}
+  .todo-row .tname{width:100%; min-width:0}
+  .todo-row.done .tname{color:var(--ink-soft)}
+  /* 네 칸 다 같은 동그라미를 씁니다. 일하기만 안 끝났을 때 남은 횟수를 안에 적습니다.
+     점 세 개를 따로 쓰면 안 찬 점이 오히려 "다 했다"처럼 보였습니다. */
+  .check{width:26px; height:26px; border-radius:50%; border:2px solid var(--line); flex:0 0 auto;
+         display:flex; align-items:center; justify-content:center;
+         font-family:var(--font-display); font-size:15px; color:var(--ink-soft)}
+  .todo-row.done .check{background:var(--sage); border-color:var(--sage); color:#FFFFFF}
+
+  /* 상점 갈래 */
+  .segs{display:flex; gap:6px; background:var(--sunk); border-radius:16px; padding:5px}
+  .segs button{flex:1 1 0; min-width:0; border:none; background:none; border-radius:12px;
+               padding:10px 4px; cursor:pointer; min-height:44px;
+               font-family:var(--font-display); font-size:15px; color:var(--ink-soft)}
+  .segs button[aria-pressed="true"]{background:var(--surface); color:var(--ink); box-shadow:var(--shadow)}
+  .segs button:focus-visible{outline:3px solid var(--sun); outline-offset:-2px}
+
+  /* 밤 — 오늘은 여기까지 */
+  .night{position:fixed; inset:0; z-index:14; background:#1D2A33;
+         display:flex; align-items:center; justify-content:center;
+         padding-left:max(16px, env(safe-area-inset-left, 0px));
+         padding-right:max(16px, env(safe-area-inset-right, 0px))}
+  .night-in{display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center; max-width:360px; width:100%}
+  .night-t{font-family:var(--font-display); font-size:23px; color:#F3EDE2; margin:0}
+  .night-s{font-family:var(--font-body); font-size:16px; color:#AFC0CB; margin:0}
+  .night .btn{background:#2C3D48; border-color:#3C5160; color:#F3EDE2; margin-top:10px; box-shadow:none}
+
+  /* 시작 화면 */
+  .namebox{font-family:var(--font-display); font-size:20px; text-align:center; color:var(--ink);
+           background:var(--surface); border:2px solid var(--line); border-radius:16px; padding:12px; width:100%}
+  .namebox:focus{outline:none; border-color:var(--sage)}
+  /* 적을 자리라는 게 보여야 합니다. 제목 글꼴로 크게 가운데 두면 이미 적힌 값처럼 보입니다 */
+  .namebox::placeholder{font-family:var(--font-body); font-size:16px; color:var(--ink-soft)}
+  .pickme{display:grid; grid-template-columns:repeat(2,1fr); gap:12px}
+  .pickme button{background:var(--surface); border:2px solid var(--line); border-radius:20px; padding:12px 8px;
+                 display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; min-width:0;
+                 font-family:var(--font-display); font-size:15px; color:var(--ink)}
+  .pickme button[aria-pressed="true"]{border-color:var(--sage); background:var(--sunk)}
+
+  /* 아트 슬롯 목록 (주소 끝에 #art) */
+  .sheet{display:grid; grid-template-columns:repeat(auto-fill,minmax(128px,1fr)); gap:10px}
+  .cell{background:var(--surface); border:1px solid var(--line); border-radius:16px;
+        padding:10px 8px; display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center}
+  .cell b{font-family:var(--font-display); font-weight:400; font-size:15px}
+  .cell span{font-size:12px; color:var(--ink-soft)}
+  .cell .no{color:var(--coral)}
+  .cell code{font-size:11px; color:var(--ink-soft); word-break:break-all}
+  .sheet-h{font-family:var(--font-display); font-size:19px; margin:6px 0 0}
+
+  /* buttons */
+  .row{display:flex; flex-wrap:wrap; gap:10px}
+  .btn{
+    font-family:var(--font-display); font-size:17px; color:var(--ink);
+    background:var(--surface); border:1px solid var(--line); border-radius:16px;
+    padding:13px 16px; cursor:pointer; box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:center; gap:8px; min-height:52px;
+    flex:1 1 calc(50% - 5px); min-width:0;
+  }
+  .btn small{font-family:var(--font-body); font-size:14px; color:var(--ink-soft)}
+  .btn:active{transform:translateY(2px); box-shadow:none}
+  .btn[disabled]{opacity:.45; cursor:default}
+  .btn[disabled]:active{transform:none; box-shadow:var(--shadow)}
+  .btn.wide{flex:1 1 100%}
+  .btn.go{background:var(--sage); border-color:var(--sage); color:#fff}
+  .btn.go small{color:rgba(255,255,255,.85)}
+  /* 잠자기 버튼. 이름을 night 로 두면 위의 밤 화면 .night(position:fixed; inset:0) 를
+     그대로 뒤집어써서 버튼이 화면 전체를 덮습니다. 그래서 sleep 입니다. */
+  .btn.sleep{background:var(--sky); border-color:var(--sky); color:#fff}
+  .btn.sleep.big{font-size:19px; min-height:64px}
+  .done-line{width:100%; text-align:center; font-family:var(--font-display); font-size:17px; color:var(--sage); margin:0}
+  /* 미니게임의 그만하기. 재료·통 버튼과 같은 흰 카드라 일곱 번째 재료처럼 보였고,
+     바로 아래 붙어 있어서 잘못 누르기 쉬웠습니다. 누를 일이 드문 버튼이니 조용하게 둡니다. */
+  .btn.quit{background:none; border-color:transparent; box-shadow:none; color:var(--ink-soft);
+            font-family:var(--font-body); font-size:15px; min-height:44px}
+  .btn.quit:active{transform:none; box-shadow:none}
+  .btn:focus-visible{outline:3px solid var(--sun); outline-offset:2px}
+
+  /* street */
+  /* 거리 배경 띠. 그림이 없는 도시는 .has 가 안 붙어서 지금처럼 제목 한 줄입니다 —
+     여덟 장이 다 와야 쓸 수 있으면 한 장도 못 씁니다.
+     전면 배경이 아니라 띠인 이유: 320px 화면에서 버튼 카드가 430px 를 덮어서,
+     뒤에 깔아봐야 카드 사이 12px 틈으로만 보입니다. */
+  .citybg.has{
+    aspect-ratio:1024 / 560; border:1px solid var(--line); border-radius:20px; overflow:hidden;
+    background-size:cover; background-position:center bottom;
+    display:flex; align-items:flex-end; padding:12px;
+  }
+  /* 그림 위의 글자는 안 읽힙니다. 이름표를 깔아 줍니다 */
+  .citybg.has h2{background:var(--surface); border-radius:14px; padding:4px 12px}
+  .street{display:grid; gap:12px}
+  .place{
+    display:flex; align-items:center; gap:14px; text-align:left;
+    background:var(--surface); border:1px solid var(--line); border-radius:20px;
+    padding:14px; cursor:pointer; box-shadow:var(--shadow); color:var(--ink);
+    font-family:var(--font-body); font-size:16px;
+  }
+  .place:active{transform:translateY(2px); box-shadow:none}
+  .place:focus-visible{outline:3px solid var(--sun); outline-offset:2px}
+  .place .nm{font-family:var(--font-display); font-size:19px; display:block}
+  .place .sub{display:block; font-family:var(--font-body); color:var(--ink-soft); font-size:14px}
+  .place.locked{opacity:.5; cursor:default}
+  .place.locked:active{transform:none; box-shadow:var(--shadow)}
+  .place svg{flex:0 0 auto}
+
+  /* shop + bag lists */
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:14px; display:flex; flex-direction:column; gap:12px}
+  .item{display:flex; align-items:center; gap:12px}
+  .item .nm{flex:1; min-width:0}
+  .item .nm b{font-family:var(--font-display); font-weight:400; font-size:17px; display:block}
+  .item .nm span{color:var(--ink-soft); font-size:14px}
+  .buy{
+    font-family:var(--font-display); font-size:16px; border:none; border-radius:14px;
+    padding:10px 14px; background:var(--sun); color:#3A2E12; cursor:pointer; min-height:44px;
+    white-space:nowrap;
+  }
+  .buy[disabled]{background:var(--sunk); color:var(--ink-soft); cursor:default}
+  .buy:focus-visible{outline:3px solid var(--sage); outline-offset:2px}
+  .tag{font-family:var(--font-display); font-size:13px; background:var(--coral); color:#fff; border-radius:10px; padding:3px 8px}
+  .stat{display:flex; justify-content:space-between; gap:12px; font-size:16px}
+  .stat b{font-family:var(--font-display); font-weight:400; font-variant-numeric:tabular-nums}
+
+  /* tabs */
+  .tabs{
+    display:flex; background:var(--surface); border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+    padding-left:max(0px, env(safe-area-inset-left, 0px));
+    padding-right:max(0px, env(safe-area-inset-right, 0px));
+  }
+  .tab{
+    flex:1; border:none; background:none; cursor:pointer; padding:9px 2px 11px;
+    font-family:var(--font-display); font-size:13px; color:var(--ink-soft);
+    display:flex; flex-direction:column; align-items:center; gap:2px; min-height:60px; min-width:0;
+  }
+  .tab .ic{display:block; line-height:0}
+  .tab .ic svg{width:23px; height:23px; display:block}
+  .tab[aria-current]{color:var(--sage)}
+  .tab:focus-visible{outline:3px solid var(--sun); outline-offset:-3px}
+  .tab.need{color:var(--coral)}
+  .tab.need .ic{animation:tabpulse 1.4s ease-in-out infinite}
+  @keyframes tabpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
+
+  /* 다음에 할 곳 반짝이기 */
+  @keyframes glow{
+    0%,100%{box-shadow:0 0 0 0 rgba(223,124,101,0.5)}
+    50%{box-shadow:0 0 0 9px rgba(223,124,101,0)}
+  }
+  .pulse{animation:glow 1.7s ease-out infinite}
+
+  /* 되돌리기 */
+  .undo{display:flex; align-items:center; gap:10px; background:var(--sunk);
+        border:1px solid var(--line); border-radius:16px; padding:10px 12px; font-size:15px}
+  .undo span{flex:1; min-width:0}
+  /* 비어 있는 칸은 자리를 차지하지 않게. 섹션이 flex라 빈 div도 간격을 하나 먹습니다 */
+  #undo-bar:empty, #undo-bar-home:empty, .me:empty{display:none}
+
+  /* 축하 */
+  .night.yay{background:#2F7A63}
+  .night.yay .btn{background:rgba(255,255,255,0.18); border-color:rgba(255,255,255,0.35)}
+
+  /* work overlay */
+  .work{
+    position:fixed; inset:0; background:var(--bg); z-index:10;
+    display:flex; flex-direction:column;
+    padding-top:env(safe-area-inset-top, 0px);
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+  }
+  .work .inner{
+    flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:14px;
+    padding-block:18px 24px;
+    padding-left:max(16px, env(safe-area-inset-left, 0px));
+    padding-right:max(16px, env(safe-area-inset-right, 0px));
+    max-width:560px; margin:0 auto; width:100%;
+  }
+  .counter{display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:12px}
+  .order{
+    background:var(--surface); border:1px solid var(--line); border-radius:20px;
+    padding:14px; display:flex; flex-direction:column; gap:10px; align-items:center;
+  }
+  .order .slots{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; min-height:66px; align-items:center}
+  .cust{display:flex; align-items:center; gap:12px; align-self:stretch}
+  .slot{
+    width:58px; height:58px; border-radius:16px; background:var(--sunk);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .slot.q{font-family:var(--font-display); font-size:24px; color:var(--ink-soft)}
+  .slot.done{background:var(--sage)}
+  .grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+  .pick{
+    background:var(--surface); border:1px solid var(--line); border-radius:18px;
+    padding:10px 6px 8px; cursor:pointer; box-shadow:var(--shadow);
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    font-family:var(--font-display); font-size:14px; color:var(--ink);
+  }
+  .pick:active{transform:translateY(2px); box-shadow:none}
+  .pick:focus-visible{outline:3px solid var(--sun); outline-offset:2px}
+  /* 꺼진 버튼은 꺼져 보여야 합니다. 주문을 보여주는 동안 재료 버튼이,
+     가진 가구를 다 놓으면 가구 버튼이 꺼집니다. */
+  .pick[disabled], .tray button[disabled]{opacity:.45; cursor:default}
+  .pick[disabled]:active{transform:none; box-shadow:var(--shadow)}
+  .pick.shake{animation:shake .35s}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+  .result{text-align:center; display:flex; flex-direction:column; gap:10px; align-items:center}
+  .result .big{font-family:var(--font-display); font-size:30px; color:var(--sage)}
+
+  /* map */
+  .map{background:var(--surface); border:1px solid var(--line); border-radius:22px; padding:14px; display:flex; flex-direction:column; gap:10px}
+  .node{display:flex; align-items:center; gap:12px; padding:12px; border-radius:16px; background:var(--surface-2); border:1px solid var(--line)}
+  .node.here{border-color:var(--sage); border-width:2px; padding:11px}
+  .node .nm{flex:1; min-width:0; font-family:var(--font-display); font-size:19px}
+  .node .sub{display:block; font-family:var(--font-body); font-size:14px; color:var(--ink-soft)}
+  .pin{width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+       font-family:var(--font-display); font-size:15px; color:#fff; background:var(--ink-soft); flex:0 0 auto}
+  .pin.on{background:var(--sage)}
+  .map .link{display:flex; align-items:center; gap:10px; padding-left:14px; min-height:30px}
+  .map .link .bar{width:3px; align-self:stretch; min-height:26px; background:var(--line); border-radius:2px}
+  .map .linkfare{font-size:13px; color:var(--ink-soft)}
+  .map .far{font-size:13px; color:var(--ink-soft); flex:0 0 auto}
+  .map .node.branch{margin-left:30px}
+  .map .link.branch{padding-left:44px}
+
+  /* bus ride */
+  .ride{
+    position:fixed; inset:0; z-index:12; background:var(--sky); cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+    padding-left:max(16px, env(safe-area-inset-left, 0px));
+    padding-right:max(16px, env(safe-area-inset-right, 0px));
+  }
+  .window{
+    width:min(100%,420px); aspect-ratio:3/2; max-width:100%;
+    border-radius:26px; overflow:hidden; border:9px solid var(--surface); background:#C3E2F2; position:relative;
+  }
+  .scenery{position:absolute; inset:0}
+  .scenery > svg, .scenery > img{position:absolute; top:0; left:0; height:100%; width:200%; max-width:none; animation:slide 2.6s linear infinite}
+  @keyframes slide{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .ride .cap{font-family:var(--font-display); font-size:21px; color:#fff; text-align:center}
+  .ride .cap.small{font-family:var(--font-body); font-size:15px; opacity:.9}
+
+  /* airport belt */
+  .belt{position:relative; height:132px; border-radius:20px; background:var(--surface-2); border:1px solid var(--line); overflow:hidden}
+  .zone{position:absolute; top:0; bottom:0; background:var(--sunk); border-left:2px dashed var(--sage); border-right:2px dashed var(--sage)}
+  .rail{position:absolute; left:0; right:0; top:104px; height:3px; background:var(--line)}
+  .lug{position:absolute; top:36px; left:0; width:56px; height:56px; will-change:transform}
+  .lug.bad{animation:shake .3s}
+  .bins{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+  .bin{border:none; border-radius:18px; padding:14px 6px; cursor:pointer; min-height:66px;
+       font-family:var(--font-display); font-size:16px; color:#fff; box-shadow:var(--shadow)}
+  .bin:active{transform:translateY(2px); box-shadow:none}
+  .bin:focus-visible{outline:3px solid var(--ink); outline-offset:2px}
+  /* 벨트에 아무것도 없을 때 눌러도 통이 한 번 흔들립니다. 조용히 넘기면
+     아이한테는 "눌렀는데 안 됐다"만 남습니다. */
+  .bin.bad{animation:shake .3s}
+  /* B계열 — 닭갈비 철판 */
+  .pan{position:relative; height:220px; border-radius:22px; overflow:hidden; touch-action:none;
+       background:#4E5357; border:1px solid var(--line); cursor:grab}
+  .pan .plate{position:absolute; left:10px; right:10px; top:10px; bottom:10px;
+              border-radius:16px; background:#767D82}
+  .meat{position:absolute; left:0; top:0; width:50px; height:50px; will-change:transform; pointer-events:none}
+  /* 익는 정도는 그림 자체를 어둡게 해서 보여줍니다. 전에는 둥근 칠(42px)을 그림 위에
+     덮었는데, 갈비 그림이 그보다 작아서 조각 둘레에 갈색 테가 생겼습니다 — 고기가
+     익는 게 아니라 철판에 얼룩이 앉은 것처럼 보였어요. filter 는 그림 모양을 그대로
+     따라가므로 진짜 PNG 가 들어와도 맞습니다. */
+  .meat .art{transition:filter .18s linear}
+  /* 곧 타는 조각을 '더 어둡게'로 알리면 익는 것과 구분이 안 됩니다. 둘 다 어두워지니까요.
+     그래서 색이 아니라 움직임과 테두리빛으로 알립니다 — 한눈에 다릅니다. */
+  .meat.hot{filter:drop-shadow(0 0 5px rgba(255,122,40,0.95))}
+  .meat.hot .art{animation:sizzle .4s ease-in-out infinite}
+  @keyframes sizzle{
+    0%,100%{transform:translateX(0) rotate(0)}
+    25%{transform:translateX(-2px) rotate(-7deg)}
+    75%{transform:translateX(2px) rotate(7deg)}
+  }
+  /* 완성한 조각은 제자리에서 터져야 합니다. .meat 에 걸면 pop 의 transform 이
+     자리를 잡고 있던 translate(x,y) 를 덮어써서, 조각이 철판 왼쪽 위로 날아갑니다.
+     (200,120)에 있던 조각이 (97,56)으로 튀는 것을 재서 확인했습니다. */
+  .meat.pop .art{animation:pop .3s ease-out forwards}
+  @keyframes pop{to{transform:scale(1.5); opacity:0}}
+
+  /* B계열 — 라떼아트 */
+  .latte{position:relative; height:250px; border-radius:22px; overflow:hidden; touch-action:none;
+         background:var(--surface-2); border:1px solid var(--line); cursor:grab}
+  .pitchwrap{position:absolute; left:50%; top:8px; width:96px; margin-left:-48px;
+             transform-origin:72% 78%; will-change:transform}
+  .cupwrap{position:absolute; left:50%; bottom:12px; width:150px; height:150px; margin-left:-75px}
+  /* 아래 네 숫자는 "잔 그림 안에서 잔 속이 어디인가" 하나를 가리킵니다.
+     진짜 work/cup 그림(384×384)을 재서 150px 상자로 옮긴 값입니다. 그림에서 잔 몸통은
+     가로 24~296, 테두리 앞쪽 안이 y=150, 안쪽 바닥이 y=268 이고, ×150/384 하면
+     가로 15~110(오른쪽 여백 40), 바닥이 아래에서 45px, 테두리가 91px 입니다.
+     손잡이는 오른쪽 298~358 이라 우유가 거기까지 가면 손잡이 위로 흘러 보입니다.
+     ★ 그림을 다시 뽑으면 이 네 줄과 JS 의 두 숫자를 다시 재야 합니다. */
+  /* 우유 색이 잔 색(#F4F0E8)과 거의 같으면, 잔 안에 제대로 들어가 있어도 얼마나 찼는지
+     안 보입니다. 라떼답게 한 톤 진한 크림으로 둡니다. */
+  .milk{position:absolute; left:20px; right:38px; bottom:45px; background:#E6D2AE; border-radius:0 0 46px 46px}
+  /* 거품은 우유(#F6F1E6) 위에 얹힙니다. 전에는 #FFFDF8 이라 명도비가 1.1:1 이었고,
+     깨졌을 때 흐리게(opacity .35) 하는 신호도 눈에 안 보였습니다. 그래서 거품에
+     테두리를 주고, 깨지면 아예 색을 바꿉니다 — 하트를 왜 못 받았는지 보여야 합니다. */
+  .foam{position:absolute; left:20px; right:38px; height:7px; background:#FFFCF4;
+        border:1px solid #CDBB99; border-radius:4px}
+  .foam.broken{background:#A89166; border-color:#8A7450}
+  .goal{position:absolute; left:15px; right:33px; border-top:2px dashed var(--sage)}
+  /* 잔이 낮아져서 "여기까지"가 잔 테두리(주황) 위에 겹칩니다. 글자색만으로는 안 읽혀서
+     흰 칩을 깔았습니다 — 뒤에 무엇이 오든 읽힙니다. */
+  .goal span{position:absolute; right:-2px; top:-20px; font-size:12px; color:var(--sage);
+             font-family:var(--font-display); background:rgba(255,255,255,.88);
+             padding:1px 5px; border-radius:8px}
+  .stream{position:absolute; width:5px; background:#F9F5EC; border-radius:3px; opacity:0}
+  /* 잔 몸통 가운데는 150px 상자의 62px 자리입니다 (50% = 75 가 아닙니다).
+     손잡이가 오른쪽에 달려 그림 전체의 가운데는 잔 가운데보다 오른쪽입니다. */
+  .heart{position:absolute; left:50%; margin-left:-26px; width:26px; height:26px; opacity:0}
+
+  /* B계열 — 비빔밥 그릇 */
+  .bowl{position:relative; width:min(100%,264px); margin:0 auto; aspect-ratio:1;
+        border-radius:50%; overflow:hidden; border:10px solid #C08359; background:#E8D9BF;
+        touch-action:none; cursor:grab}
+  .bowl .cells{position:absolute; inset:0; display:grid; grid-template-columns:repeat(8,1fr)}
+  .cell2{position:relative}
+  .cell2 .mx{position:absolute; inset:0; background:#C4553C; opacity:0}
+  .bowl.done{animation:pop .4s ease-out}
+
+  /* C계열 — 귤밭 */
+  .grove{position:relative; height:300px; border-radius:22px; overflow:hidden; touch-action:none;
+         background:#DCEBF2; border:1px solid var(--line); cursor:grab}
+  .grove .leaf{position:absolute; left:0; right:0; top:0; height:40%; background:#7FB58C;
+               border-radius:0 0 40px 40px}
+  .grove .ground{position:absolute; left:0; right:0; bottom:0; height:16%; background:#B9CF9E}
+  .gy{position:absolute; left:0; top:0; width:30px; height:30px; will-change:transform; pointer-events:none}
+  .basket{position:absolute; left:0; bottom:8px; width:70px; will-change:transform; pointer-events:none}
+
+  .tally{display:flex; gap:6px; flex-wrap:wrap}
+  .dot{width:12px; height:12px; border-radius:50%; background:var(--sunk)}
+  .dot.hit{background:var(--sage)}
+  .dot.miss{background:var(--line)}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms !important; transition-duration:.01ms !important}
+  }
+</style>
+
+<div class="app">
+  <div class="status">
+    <span class="coin" id="money">0원</span>
+    <span class="sep">·</span>
+    <span class="meta" id="day">1일째</span>
+    <span class="right" id="works">일할 수 있는 횟수 3번</span>
+  </div>
+
+  <div class="stage">
+    <div class="pad">
+      <section id="s-hamster">
+        <div class="room">
+          <div class="bubble" id="say">안녕!</div>
+          <div class="room-floor">
+            <div id="me-room"></div>
+            <div id="ham"></div>
+          </div>
+        </div>
+        <div class="row" id="care"></div>
+        <div class="playrow" id="play"></div>
+
+        <h2>오늘 할 일</h2>
+        <div class="todo" id="todo"></div>
+        <div class="row" id="sleep-wrap"></div>
+      </section>
+
+      <section id="s-map" hidden>
+        <h2>어디로 갈까</h2>
+        <p class="hint" id="map-hint"></p>
+        <div class="map" id="map"></div>
+      </section>
+
+      <section id="s-street" hidden>
+        <div class="citybg" id="city-bg"><h2 id="street-name">서울</h2></div>
+        <div class="me" id="me-card"></div>
+        <p class="hint">가고 싶은 곳을 누르세요.</p>
+        <div class="street" id="places"></div>
+      </section>
+
+      <section id="s-home" hidden>
+        <h2 id="home-name">내 집</h2>
+        <div id="undo-bar-home"></div>
+        <div id="home-sign-wrap" hidden>
+          <label class="lab" for="home-sign">문패</label>
+          <input class="signbox" id="home-sign" maxlength="10" placeholder="우리 집" autocomplete="off">
+        </div>
+        <div id="home-body" style="display:flex; flex-direction:column; gap:14px"></div>
+      </section>
+
+      <section id="s-bag" hidden>
+        <h2>가방</h2>
+        <div class="card" id="bag"></div>
+        <h2>옷장</h2>
+        <div class="card">
+          <div class="segs" id="sex-pick"></div>
+          <div class="wardrobe" id="wardrobe"></div>
+        </div>
+
+        <h2>도장</h2>
+        <div class="card"><div class="row" id="stamps"></div></div>
+      </section>
+
+      <section id="s-shop" hidden>
+        <h2>상점</h2>
+        <div id="undo-bar"></div>
+        <div class="segs" id="shop-segs"></div>
+        <p class="hint" id="sale-hint"></p>
+        <div class="card" id="shop"></div>
+        <div class="card" id="shop-looks" hidden></div>
+        <div class="card" id="shop-furn" hidden></div>
+        <div class="row"><button class="btn wide" id="shop-back">거리로 나가기</button></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- role="tablist" 를 쓰려면 화살표키 이동까지 붙여야 맞습니다. 다섯 칸짜리 아래 메뉴에는
+       과한 일이라 평범한 nav 로 두고, 지금 칸만 aria-current 로 알립니다. -->
+  <nav class="tabs" aria-label="화면 고르기">
+    <button class="tab" type="button" data-go="map">지도</button>
+    <button class="tab" type="button" data-go="street">거리</button>
+    <button class="tab" type="button" data-go="home">집</button>
+    <button class="tab" type="button" data-go="hamster" aria-current="page">햄찌</button>
+    <button class="tab" type="button" data-go="bag">가방</button>
+  </nav>
+</div>
+
+<!-- 겹화면에는 role="dialog" 와 aria-modal 을 답니다. 뒤쪽 .app 은 열려 있는 동안
+     inert 로 꺼지므로(아래 syncOverlays), 탭 키가 뒤로 새지 않습니다. -->
+<div class="work" id="work" role="dialog" aria-modal="true" aria-label="일하기" hidden>
+  <div class="inner">
+    <div class="counter">
+      <span id="w-me"></span>
+      <span id="w-step" class="coin">손님 1 / 3</span>
+      <span class="right" id="w-earned" style="margin-left:auto; color:var(--ink-soft); font-size:15px">0원</span>
+    </div>
+    <div id="w-body"></div>
+  </div>
+</div>
+
+<div class="night yay" id="yay" role="dialog" aria-modal="true" aria-labelledby="yay-t" hidden>
+  <div class="night-in">
+    <div id="yay-art"></div>
+    <p class="night-t" id="yay-t">축하해요</p>
+    <p class="night-s" id="yay-s"></p>
+    <button class="btn wide" id="yay-close">좋아!</button>
+  </div>
+</div>
+
+<div class="night" id="night" role="dialog" aria-modal="true" aria-labelledby="night-day" hidden>
+  <div class="night-in">
+    <div id="night-ham"></div>
+    <p class="night-t" id="night-day">1일째 끝</p>
+    <p class="night-s">오늘은 여기까지. 내일 또 보자.</p>
+    <button class="btn wide" id="night-close">닫기</button>
+  </div>
+</div>
+
+<div class="work" id="intro" role="dialog" aria-modal="true" aria-label="나를 정해요" hidden>
+  <div class="inner">
+    <h2>나를 정해요</h2>
+    <p class="hint">이름을 적고, 나를 고르고, 처음 입을 옷을 고르세요.</p>
+    <label class="lab" for="me-name">이름</label>
+    <input class="namebox" id="me-name" maxlength="8" placeholder="여기에 적어요" autocomplete="off">
+    <div class="segs" id="intro-sex"></div>
+    <div class="pickme" id="intro-looks"></div>
+    <div class="row"><button class="btn go wide" id="intro-go">시작하기</button></div>
+  </div>
+</div>
+
+<div class="work" id="sheet" role="dialog" aria-modal="true" aria-label="어른용 설정" hidden><div class="inner" id="sheet-body"></div></div>
+
+<div class="ride" id="ride" role="dialog" aria-modal="true" aria-label="가는 중" hidden>
+  <div class="window"><div class="scenery" id="scenery"></div><div class="rider" id="rider"></div></div>
+  <div class="cap" id="ride-cap">가는 중</div>
+  <div class="cap small">햄찌도 이동장에 넣어 같이 가요</div>
+</div>
+
+<script>
+'use strict';
+
+/* ---------- 말 ---------- */
+const T = {
+  hungry: '배고파...',
+  thirsty: '목말라!',
+  dirty: '톱밥 갈아줘',
+  happy: '신난다!',
+  ok: '기분 좋아',
+  eating: '냠냠냠',
+  sleeping: '쿨... 쿨...',
+  pet: '헤헤',
+  noFood: '밥이 없어요. 상점에서 사 오세요.',
+  noWater: '물이 없어요. 상점에서 사 오세요.',
+  noBed: '톱밥이 없어요. 상점에서 사 오세요.',
+  noTreat: '간식이 없어요.'
+};
+
+/* ---------- 물건 ---------- */
+const GOODS = [
+  { id:'food',   name:'햄찌 밥',   desc:'3번 줄 수 있어요', price:100, add:3 },
+  { id:'water',  name:'깨끗한 물', desc:'3번 줄 수 있어요', price:100, add:3 },
+  { id:'bed',    name:'톱밥',      desc:'2번 갈 수 있어요', price:150, add:2 },
+  { id:'treat',  name:'해바라기씨', desc:'아주 좋아해요',    price:200, add:2 },
+  { id:'wheel',  name:'쳇바퀴',    desc:'한 번만 사면 돼요', price:500, once:true },
+  { id:'tunnel', name:'터널',      desc:'한 번만 사면 돼요', price:400, once:true }
+];
+
+/* ---------- 편의점 재료 ---------- */
+const ITEMS = [
+  { id:'gimbap', name:'삼각김밥' },
+  { id:'milk',   name:'우유' },
+  { id:'ramen',  name:'컵라면' },
+  { id:'choco',  name:'초코바' },
+  { id:'drink',  name:'음료수' },
+  { id:'banana', name:'바나나' }
+];
+const BAKERY = [
+  { id:'flour',  name:'밀가루' },
+  { id:'butter', name:'버터' },
+  { id:'sugar',  name:'설탕' },
+  { id:'egg',    name:'달걀' },
+  { id:'cream',  name:'생크림' },
+  { id:'berry',  name:'딸기' }
+];
+
+/* A계열 변형. 편의점은 보여주고 바로 치는 리듬, 빵집은 외우고 기다렸다 치는 리듬입니다.
+   빵집은 주문이 길고 보여주는 시간이 길이와 상관없이 짧아서 외우는 쪽에 무게가 실립니다. */
+const WORK_A = {
+  store: {
+    items: ITEMS,
+    len:   function(i){ return 2 + i; },
+    showMs:function(n){ return 1200 + n * 700; },
+    ask:   '이거 주세요!',
+    wait:  '순서대로 집어 주세요',
+    gap:   700
+  },
+  bakery: {
+    items: BAKERY,
+    len:   function(i){ return 3 + (i > 1 ? 1 : 0); },
+    showMs:function(n){ return 1400 + n * 400; },
+    ask:   '굽는 동안 외워 두세요',
+    wait:  '순서대로 반죽을 올려 주세요',
+    gap:   500
+  }
+};
+
+/* ---------- 도시 ---------- */
+/* 지도에 적힌 차례대로 늘어서는 길입니다. 인천 — 서울 — 춘천 — 강릉.
+   버스는 바로 옆 도시로만 가고, 요금은 거리에 따라 다릅니다. */
+const CITIES = {
+  incheon:   { name:'인천', to:'인천으로', sub:'공항에서 일할 수 있어요' },
+  seoul:     { name:'서울', to:'서울로',   sub:'편의점에서 일할 수 있어요' },
+  chuncheon: { name:'춘천', to:'춘천으로', sub:'닭갈비집에서 일할 수 있어요' },
+  gangneung: { name:'강릉', to:'강릉으로', sub:'카페에서 일할 수 있어요' },
+  gyeongju:  { name:'경주', to:'경주로',   sub:'빵집에서 일할 수 있어요' },
+  jeonju:    { name:'전주', to:'전주로',   sub:'비빔밥집에서 일할 수 있어요', branch:'gyeongju' },
+  busan:     { name:'부산', to:'부산으로', sub:'어시장에서 일할 수 있어요' },
+  jeju:      { name:'제주', to:'제주로',   sub:'귤밭에서 일할 수 있어요' }
+};
+const ROUTES = [
+  { a:'incheon',   b:'seoul',     fare:400 },
+  { a:'seoul',     b:'chuncheon', fare:700 },
+  { a:'chuncheon', b:'gangneung', fare:900 },
+  { a:'gangneung', b:'gyeongju',  fare:1200 },
+  { a:'gyeongju',  b:'jeonju',    fare:1000 },
+  { a:'gyeongju',  b:'busan',     fare:600 },
+  { a:'busan',     b:'jeju',      fare:2000, boat:true }
+];
+function routeBoat(from, to){
+  const r = ROUTES.filter(function(x){
+    return (x.a === from && x.b === to) || (x.b === from && x.a === to);
+  })[0];
+  return !!(r && r.boat);
+}
+function fareTo(from, to){
+  const r = ROUTES.filter(function(x){
+    return (x.a === from && x.b === to) || (x.b === from && x.a === to);
+  })[0];
+  return r ? r.fare : 0;
+}
+function cityOrder(){ return Object.keys(CITIES); }
+
+/* 처음 가는 길은 제값, 이미 도장을 받은 도시로 다시 가는 길은 반값입니다.
+   탐험은 큰맘 먹고, 오가는 것은 가볍게. 옷이 도시마다 흩어져 있어서
+   왕복이 비싸면 모으러 다닐 수가 없습니다. */
+function beenTo(key){
+  return CITIES[key] && S.stamps.indexOf(CITIES[key].name) >= 0;
+}
+function fareNow(from, to){
+  const base = fareTo(from, to);
+  if(base <= 0) return 0;
+  /* 지도에 "반값"이라고 적어 두었으니 반값을 넘으면 안 됩니다. 전에는 200 으로 나눠
+     반올림해서 700원 길이 400원(57%)이 됐습니다. 100원 단위로 내림합니다. */
+  return beenTo(to) ? Math.floor(base / 2 / 100) * 100 : base;
+}
+
+/* 도시마다 일자리 하나와 구경거리 하나. 도시를 늘릴 때 여기 두 줄만 더하면 됩니다. */
+const WORKPLACE = {
+  seoul:     { kind:'store',  name:'편의점',    start:function(){ startWork('store'); } },
+  incheon:   { kind:'air',    name:'공항',      start:function(){ startAirport('bag'); } },
+  chuncheon: { kind:'grill',  name:'닭갈비집',  start:function(){ startGrill(); } },
+  gangneung: { kind:'cafe',   name:'카페',      start:function(){ startLatte(); } },
+  gyeongju:  { kind:'bakery', name:'빵집',      start:function(){ startWork('bakery'); } },
+  jeonju:    { kind:'bibim',  name:'비빔밥집',  start:function(){ startBibim(); } },
+  busan:     { kind:'market', name:'어시장',    start:function(){ startAirport('fish'); } },
+  jeju:      { kind:'grove',  name:'귤밭',      start:function(){ startGyul(); } }
+};
+const SIGHT = {
+  incheon:   { kind:'sea',   name:'바닷가',    sub:'파도 구경하기',    say:'바다 구경 재밌었다!' },
+  chuncheon: { kind:'lake',  name:'호수',      sub:'물빛 구경하기',    say:'호수가 반짝반짝!' },
+  gangneung: { kind:'sea',   name:'솔숲 바다', sub:'파도 소리 듣기',   say:'파도 소리 좋다!' },
+  gyeongju:  { kind:'tomb',  name:'능',        sub:'풀언덕 둘러보기',  say:'언덕이 엄청 크다!' },
+  jeonju:    { kind:'hanok', name:'한옥마을',  sub:'기와담 따라 걷기', say:'기와가 반질반질!' },
+  busan:     { kind:'gull',  name:'갈매기',    sub:'갈매기 보기',      say:'갈매기가 따라온다!' },
+  jeju:      { kind:'dol',   name:'돌하르방',  sub:'돌하르방 만나기',  say:'코를 만지면 좋대!' }
+};
+
+/* ---------- 수하물 색 ---------- */
+const COLORS = [
+  { id:'r', name:'빨강', css:'var(--bag-r)' },
+  { id:'b', name:'파랑', css:'var(--bag-b)' },
+  { id:'y', name:'노랑', css:'var(--bag-y)' }
+];
+const FISH = [
+  { id:'mackerel', name:'고등어', css:'#6E93B8' },
+  { id:'squid',    name:'오징어', css:'#E3D3BE', ink:'#5A4C3C' },
+  { id:'crab',     name:'게',     css:'#D96A4F' }
+];
+
+/* C계열 변형. 공항 가방은 일정한 속도로 흘러오고, 어시장 물고기는 미끄러워
+   빨라졌다 느려졌다 합니다. 같은 "가운데 칸에서 누르기"인데 타이밍 재는 맛이 다릅니다. */
+const WORK_C = {
+  bag: {
+    kinds: COLORS, art:'luggage/', label:'수하물', dart:0,
+    hint:'벨트 가운데 칸에 가방이 들어오면, 같은 색 통을 누르세요.'
+  },
+  fish: {
+    kinds: FISH, art:'fish/', label:'물고기', dart:0.55,
+    hint:'미끄러워 자꾸 빨라졌다 느려져요. 가운데 칸에 오면 같은 상자를 누르세요.'
+  }
+};
+
+/* ---------- 상태 ---------- */
+const S = {
+  day: 1,
+  money: 300,
+  works: 3,
+  hunger: 60, thirst: 60, bed: 70, mood: 60,
+  inv: { food:1, water:1, bed:1, treat:0 },
+  owns: { wheel:false, tunnel:false },
+  sale: 'treat',
+  lastSleep: null,
+  dayStamp: null,
+  today: { fed:false, shopped:false, played:false },
+  me: { name:'', look:'1', owned:['1'] },
+  furn: {},
+  homes: {
+    seoul:   { owned:true,  wall:0, floor:0, sign:'', cells:{} },
+    incheon: { owned:false, wall:1, floor:2, sign:'', cells:{} }
+  },
+  city: 'seoul',
+  stamps: ['서울'],
+  tab: 'hamster'
+};
+
+let face = 'idle';     // idle | eat | sleep | glad | sad
+let faceTimer = 0;
+
+/* ---------- 저장 ---------- */
+const KEY = 'hamjji.v1';
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(!raw) return;
+    const p = JSON.parse(raw);
+    if(p && typeof p === 'object' && !Array.isArray(p)) Object.assign(S, p);
+  }catch(e){}
+}
+
+/* ---------- 손맛 숫자 (주소 끝에 #tune) ----------
+   아이 손에 맞는 값은 해보고 정해야 합니다. 코드를 고치러 오지 않아도 되게
+   만질 값만 여기 모아 localStorage 에 담습니다.
+   적용하면 화면을 새로 읽습니다 — 아래 값들은 const 로 한 번만 읽히니,
+   다시 읽히게 하는 것이 각 쓰는 자리를 TUNE 참조로 바꾸는 것보다 짧습니다.
+   진도는 KEY 쪽에 따로 있어서 새로 읽어도 그대로입니다. */
+const TUNE_KEY = 'hamjji.tune';
+const TUNE_DEF = {
+  /* meatBurn 은 조각 하나만 집게 바꾸면서 3500 → 5000 으로 늘렸습니다.
+     전에는 한 번 쓸 때 여러 개가 같이 살아나서 3.5초면 충분했는데, 이제는 여섯 개를
+     하나씩 집어 옮겨야 하므로 한 바퀴 돌 시간이 필요합니다. 여기도 계산으로 고른
+     출발점이고, 아이가 하는 걸 보고 #tune 에서 맞추는 자리입니다. */
+  /* meatGrab 도 36 → 44. 쓸던 때는 넓게 지나가니 상관없었는데, 조각을 하나씩
+     집는 지금은 집히는 폭이 곧 "눌렀는데 안 잡힌다"가 됩니다. */
+  meatDone: 9000, meatBurn: 5000, meatStagger: 600, meatGrab: 44,
+  latteSpeed: 42, cupGoal: 85,
+  brush: 0.13, brushInk: 16,
+  gyulGrab: 36, gyulCatch: 24, gyulDrift: 0.1,
+  airLock: 600
+};
+const TUNE = Object.assign({}, TUNE_DEF);
+try{
+  const tp = JSON.parse(localStorage.getItem(TUNE_KEY) || '{}');
+  /* 숫자인지 보고 받습니다. localStorage 는 손으로도 고칠 수 있는 자리고,
+     NaN 하나가 들어오면 미니게임이 조용히 안 끝납니다. */
+  Object.keys(TUNE_DEF).forEach(function(k){
+    if(typeof tp[k] === 'number' && isFinite(tp[k]) && tp[k] > 0) TUNE[k] = tp[k];
+  });
+}catch(e){}
+const TUNE_KNOBS = [
+  ['meatDone',    '닭갈비 익는 시간',       'ms', 500,  '늘리면 느긋해집니다'],
+  ['meatBurn',    '닭갈비 타는 시간',       'ms', 250,  '늘리면 쉬워집니다'],
+  ['meatStagger', '조각마다 늦게 시작',     'ms', 100,  '늘리면 완성이 더 흩어집니다'],
+  ['meatGrab',    '닭갈비 잡히는 폭',       'px', 4,    '늘리면 밀기 쉬워집니다'],
+  ['latteSpeed',  '라떼 차오르는 속도',     '',   4,    '줄이면 천천히 찹니다'],
+  ['cupGoal',     '라떼 성공 하한',         '',   5,    '줄이면 쉬워집니다'],
+  ['brush',       '비빔밥 붓 넓이',         '',   0.01, '늘리면 넓게 칠해집니다'],
+  ['brushInk',    '한 번에 칠하는 양',      '',   2,    '늘리면 빨리 찹니다'],
+  ['gyulGrab',    '귤 흔들리는 폭',         'px', 4,    '줄이면 한 번에 적게 떨어집니다'],
+  ['gyulCatch',   '바구니 받는 폭',         'px', 2,    '늘리면 쉬워집니다'],
+  ['gyulDrift',   '귤 옆으로 흐르는 속도',  '',   0.01, '줄이면 똑바로 떨어집니다'],
+  ['airLock',     '공항·어시장 오답 잠금',  'ms', 100,  '늘리면 난타가 더 막힙니다']
+];
+
+/* 저장 모양이 바뀌어도 열리게 맞춰 놓습니다. 집은 CITIES를 보고 채우므로
+   나중에 도시를 늘려도 옛 저장이 깨지지 않습니다.
+   S.v 는 적어만 두고 아직 아무 데서도 읽지 않습니다 — 나중에 저장 모양을 크게
+   바꿔야 할 때 "어느 판으로 저장된 것인가"를 알기 위한 자리입니다. */
+const SAVE_V = 2;
+function normalize(){
+  if(!S.me || !S.me.owned || !S.me.owned.length) S.me = { name:'', sex:'b', look:'1', owned:['1'] };
+  /* 성별이 생기기 전 저장은 남자로 엽니다. 가방에서 언제든 바꿉니다 */
+  if(S.me.sex !== 'b' && S.me.sex !== 'g') S.me.sex = 'b';
+  if(!S.today) S.today = { fed:false, shopped:false, played:false };
+  if(!S.inv) S.inv = { food:1, water:1, bed:1, treat:0 };
+  if(!S.owns) S.owns = { wheel:false, tunnel:false };
+  if(!S.furn) S.furn = {};
+  if(!S.stamps || !S.stamps.length) S.stamps = ['서울'];
+  if(!S.homes || typeof S.homes !== 'object') S.homes = {};
+  Object.keys(CITIES).forEach(function(k){
+    const h = S.homes[k];
+    if(!h || typeof h !== 'object'){
+      S.homes[k] = { owned: k === 'seoul', wall:0, floor:0, sign:'', cells:{} };
+      return;
+    }
+    if(typeof h.wall !== 'number') h.wall = 0;
+    if(typeof h.floor !== 'number') h.floor = 0;
+    if(typeof h.sign !== 'string') h.sign = '';
+    if(!h.cells || typeof h.cells !== 'object') h.cells = {};
+  });
+  if(!CITIES[S.city]) S.city = 'seoul';
+  if(typeof S.works !== 'number') S.works = 3;
+  if(typeof S.lastSleep !== 'number') S.lastSleep = null;
+  if(typeof S.dayStamp !== 'number') S.dayStamp = null;
+  if(typeof S.day !== 'number' || S.day < 1) S.day = 1;
+  if(!GOODS.filter(function(g){ return g.id === S.sale; }).length) S.sale = GOODS[0].id;
+  if(typeof S.hunger !== 'number') S.hunger = 60;
+  if(typeof S.thirst !== 'number') S.thirst = 60;
+  if(typeof S.bed !== 'number') S.bed = 70;
+  if(typeof S.mood !== 'number') S.mood = 60;
+  S.v = SAVE_V;
+}
+
+/* ---------- 아트 슬롯 ----------
+   그림은 이 등록표를 통해서만 화면에 올라갑니다.
+     w, h : AI로 뽑을 때 권장하는 그림 크기
+     box  : 화면에 보일 기본 폭(px)
+     bg   : '투명' 이면 배경을 지운 PNG로 뽑습니다
+     use  : '지금' 은 지금 쓰이는 칸, '나중' 은 자리만 잡아둔 칸
+   그림이 생기면 아래 ART_SRC 에 주소만 적으면 그 칸만 바로 바뀝니다.
+   주소 끝에 #art 를 붙이면 전체 목록을 볼 수 있습니다. */
+const ART = {
+  'hamster/idle':   {name:'햄찌 기본',    w:512, h:440, box:240, bg:'투명', use:'지금'},
+  'hamster/eat':    {name:'먹는 중',      w:512, h:440, box:240, bg:'투명', use:'지금'},
+  'hamster/sleep':  {name:'자는 중',      w:512, h:440, box:240, bg:'투명', use:'지금'},
+  'hamster/glad':   {name:'신난',         w:512, h:440, box:240, bg:'투명', use:'지금'},
+  'hamster/sad':    {name:'배고픈',       w:512, h:440, box:240, bg:'투명', use:'지금'},
+
+  'item/gimbap':    {name:'삼각김밥',     w:512, h:512, box:44,  bg:'투명', use:'지금'},
+  'item/milk':      {name:'우유',         w:512, h:512, box:44,  bg:'투명', use:'지금'},
+  'item/ramen':     {name:'컵라면',       w:512, h:512, box:44,  bg:'투명', use:'지금'},
+  'item/choco':     {name:'초코바',       w:512, h:512, box:44,  bg:'투명', use:'지금'},
+  'item/drink':     {name:'음료수',       w:512, h:512, box:44,  bg:'투명', use:'지금'},
+  'item/banana':    {name:'바나나',       w:512, h:512, box:44,  bg:'투명', use:'지금'},
+
+  'goods/food':     {name:'햄찌 밥',      w:512, h:512, box:34,  bg:'투명', use:'지금'},
+  'goods/water':    {name:'깨끗한 물',    w:512, h:512, box:34,  bg:'투명', use:'지금'},
+  'goods/bed':      {name:'톱밥',         w:512, h:512, box:34,  bg:'투명', use:'지금'},
+  'goods/treat':    {name:'해바라기씨',   w:512, h:512, box:34,  bg:'투명', use:'지금'},
+  'goods/wheel':    {name:'쳇바퀴',       w:512, h:512, box:34,  bg:'투명', use:'지금'},
+  'goods/tunnel':   {name:'터널',         w:512, h:512, box:34,  bg:'투명', use:'지금'},
+
+  'place/store':    {name:'편의점',       w:512, h:512, box:46,  bg:'투명', use:'지금'},
+  'place/shop':     {name:'상점',         w:512, h:512, box:46,  bg:'투명', use:'지금'},
+  'place/home':     {name:'내 집',        w:512, h:512, box:46,  bg:'투명', use:'지금'},
+  'place/air':      {name:'공항',         w:512, h:512, box:46,  bg:'투명', use:'지금'},
+  'place/sea':      {name:'바닷가',       w:512, h:512, box:46,  bg:'투명', use:'지금'},
+  'place/bus':      {name:'버스정류장',   w:512, h:512, box:46,  bg:'투명', use:'지금'},
+
+  'luggage/r':      {name:'빨강 가방',    w:512, h:512, box:56,  bg:'투명', use:'지금'},
+  'luggage/b':      {name:'파랑 가방',    w:512, h:512, box:56,  bg:'투명', use:'지금'},
+  'luggage/y':      {name:'노랑 가방',    w:512, h:512, box:56,  bg:'투명', use:'지금'},
+
+  'scenery/city':   {name:'도시 풍경',    w:1600, h:600, box:120, bg:'있음', use:'지금'},
+  'scenery/sea':    {name:'바다 풍경',    w:1600, h:600, box:120, bg:'있음', use:'지금'},
+
+  'stamp/seoul':    {name:'서울 도장',    w:512, h:512, box:62,  bg:'투명', use:'지금'},
+  'stamp/incheon':  {name:'인천 도장',    w:512, h:512, box:62,  bg:'투명', use:'지금'},
+
+  /* 거리 띠는 도시마다 한 장입니다. 둘만 있으면 나머지 여섯 도시가 민트색으로 남아
+     "서울만 잘 만든 게임"이 됩니다. 방·버스 칸은 뺐습니다 — 방은 가구 열여섯 장이
+     위를 덮고, 버스는 이미 창으로 풍경이 흘러가서 창이 둘이 됩니다. */
+  'bg/street-incheon':   {name:'인천 거리',   w:1024, h:560, box:120, bg:'있음', use:'지금'},
+  'bg/street-seoul':     {name:'서울 거리',   w:1024, h:560, box:120, bg:'있음', use:'지금'},
+  'bg/street-chuncheon': {name:'춘천 거리',   w:1024, h:560, box:120, bg:'있음', use:'지금'},
+  'bg/street-gangneung': {name:'강릉 거리',   w:1024, h:560, box:120, bg:'있음', use:'지금'},
+  'bg/street-gyeongju':  {name:'경주 거리',   w:1024, h:560, box:120, bg:'있음', use:'지금'},
+  'bg/street-jeonju':    {name:'전주 거리',   w:1024, h:560, box:120, bg:'있음', use:'지금'},
+  'bg/street-busan':     {name:'부산 거리',   w:1024, h:560, box:120, bg:'있음', use:'지금'},
+  'bg/street-jeju':      {name:'제주 거리',   w:1024, h:560, box:120, bg:'있음', use:'지금'},
+
+
+  'furniture/bed':     {name:'침대',      w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/desk':    {name:'책상',      w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/chair':   {name:'의자',      w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/plant':   {name:'화분',      w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/rug':     {name:'러그',      w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/lamp':    {name:'램프',      w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/shelf':   {name:'책장',      w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/cushion': {name:'쿠션',      w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/frame':   {name:'한강 액자', w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/shell':   {name:'조개 모빌', w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/lake':    {name:'호수 사진', w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/pine':    {name:'솔방울 화분', w:512, h:512, box:44, bg:'투명', use:'지금'},
+
+  'place/grill':    {name:'닭갈비집',   w:512, h:512, box:46, bg:'투명', use:'지금'},
+  'place/cafe':     {name:'카페',       w:512, h:512, box:46, bg:'투명', use:'지금'},
+  'place/lake':     {name:'호수',       w:512, h:512, box:46, bg:'투명', use:'지금'},
+
+  'work/galbi':     {name:'닭갈비 조각', w:512, h:512, box:52, bg:'투명', use:'지금'},
+  'work/cup':       {name:'라떼 잔',     w:512, h:512, box:150, bg:'투명', use:'지금'},
+  'work/pitcher':   {name:'우유 주전자', w:512, h:512, box:96, bg:'투명', use:'지금'},
+
+  'scenery/lake':   {name:'호수 풍경',   w:1600, h:600, box:120, bg:'있음', use:'지금'},
+
+  'stamp/chuncheon':{name:'춘천 도장',   w:512, h:512, box:62, bg:'투명', use:'지금'},
+  'stamp/gangneung':{name:'강릉 도장',   w:512, h:512, box:62, bg:'투명', use:'지금'},
+
+
+  'item/flour':     {name:'밀가루',   w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'item/butter':    {name:'버터',     w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'item/sugar':     {name:'설탕',     w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'item/egg':       {name:'달걀',     w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'item/cream':     {name:'생크림',   w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'item/berry':     {name:'딸기',     w:512, h:512, box:44, bg:'투명', use:'지금'},
+
+  'fish/mackerel':  {name:'고등어',   w:512, h:512, box:56, bg:'투명', use:'지금'},
+  'fish/squid':     {name:'오징어',   w:512, h:512, box:56, bg:'투명', use:'지금'},
+  'fish/crab':      {name:'게',       w:512, h:512, box:56, bg:'투명', use:'지금'},
+
+  'work/orange':    {name:'귤',       w:512, h:512, box:30, bg:'투명', use:'지금'},
+  'work/basket':    {name:'바구니',   w:512, h:420, box:70, bg:'투명', use:'지금'},
+
+  'place/bakery':   {name:'빵집',     w:512, h:512, box:46, bg:'투명', use:'지금'},
+  'place/bibim':    {name:'비빔밥집', w:512, h:512, box:46, bg:'투명', use:'지금'},
+  'place/market':   {name:'어시장',   w:512, h:512, box:46, bg:'투명', use:'지금'},
+  'place/grove':    {name:'귤밭',     w:512, h:512, box:46, bg:'투명', use:'지금'},
+  'place/tomb':     {name:'능',       w:512, h:512, box:46, bg:'투명', use:'지금'},
+  'place/hanok':    {name:'한옥마을', w:512, h:512, box:46, bg:'투명', use:'지금'},
+  'place/gull':     {name:'갈매기',   w:512, h:512, box:46, bg:'투명', use:'지금'},
+  'place/dol':      {name:'돌하르방', w:512, h:512, box:46, bg:'투명', use:'지금'},
+  'place/port':     {name:'항구',     w:512, h:512, box:46, bg:'투명', use:'지금'},
+
+  'scenery/field':  {name:'들판 풍경', w:1600, h:600, box:120, bg:'있음', use:'지금'},
+
+  'stamp/gyeongju': {name:'경주 도장', w:512, h:512, box:62, bg:'투명', use:'지금'},
+  'stamp/jeonju':   {name:'전주 도장', w:512, h:512, box:62, bg:'투명', use:'지금'},
+  'stamp/busan':    {name:'부산 도장', w:512, h:512, box:62, bg:'투명', use:'지금'},
+  'stamp/jeju':     {name:'제주 도장', w:512, h:512, box:62, bg:'투명', use:'지금'},
+
+  'furniture/tile': {name:'기와 모형',   w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/fan':  {name:'부채 장식',   w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/gullm':{name:'갈매기 모빌', w:512, h:512, box:44, bg:'투명', use:'지금'},
+  'furniture/dolm': {name:'돌하르방 인형', w:512, h:512, box:44, bg:'투명', use:'지금'}
+};
+
+/* 그림 주소. 'hamster/idle': 'art/hamster-idle.png' 처럼 한 줄 적으면 됩니다. */
+const ART_SRC = {
+  'hamster/idle':  'art/hamster-idle.png',
+  'hamster/eat':   'art/hamster-eat.png',
+  'hamster/sleep': 'art/hamster-sleep.png',
+  'hamster/sad':   'art/hamster-sad.png',
+  'hamster/glad':  'art/hamster-glad.png',
+  'look/b/1':      'art/look-b-1.png',
+  'look/b/2':      'art/look-b-2.png',
+  'look/b/3':      'art/look-b-3.png',
+  'look/b/4':      'art/look-b-4.png',
+  'look/b/5':      'art/look-b-5.png',
+  'look/b/6':      'art/look-b-6.png',
+  'look/b/7':      'art/look-b-7.png',
+  'look/b/8':      'art/look-b-8.png',
+  'look/b/9':      'art/look-b-9.png',
+  'look/b/10':     'art/look-b-10.png',
+  'look/b/11':     'art/look-b-11.png',
+  'look/b/12':     'art/look-b-12.png',
+  'look/b/13':     'art/look-b-13.png',
+  'look/b/14':     'art/look-b-14.png',
+  'look/b/15':     'art/look-b-15.png',
+  'look/b/16':     'art/look-b-16.png',
+  'look/b/17':     'art/look-b-17.png',
+  'look/b/18':     'art/look-b-18.png',
+  'look/g/1':      'art/look-g-1.png',
+  'look/g/2':      'art/look-g-2.png',
+  'look/g/3':      'art/look-g-3.png',
+  'look/g/4':      'art/look-g-4.png',
+  'look/g/5':      'art/look-g-5.png',
+  'look/g/6':      'art/look-g-6.png',
+  'look/g/7':      'art/look-g-7.png',
+  'look/g/8':      'art/look-g-8.png',
+  'look/g/9':      'art/look-g-9.png',
+  'look/g/10':     'art/look-g-10.png',
+  'look/g/11':     'art/look-g-11.png',
+  'look/g/12':     'art/look-g-12.png',
+  'look/g/13':     'art/look-g-13.png',
+  'look/g/14':     'art/look-g-14.png',
+  'look/g/15':     'art/look-g-15.png',
+  'look/g/16':     'art/look-g-16.png',
+  'look/g/17':     'art/look-g-17.png',
+  'look/g/18':     'art/look-g-18.png',
+
+  'place/store':   'art/place-store.png',
+  'place/air':     'art/place-air.png',
+  'place/grill':   'art/place-grill.png',
+  'place/cafe':    'art/place-cafe.png',
+  'place/bakery':  'art/place-bakery.png',
+  'place/bibim':   'art/place-bibim.png',
+  'place/market':  'art/place-market.png',
+  'place/grove':   'art/place-grove.png',
+  'place/sea':     'art/place-sea.png',
+  'place/lake':    'art/place-lake.png',
+  'place/tomb':    'art/place-tomb.png',
+  'place/hanok':   'art/place-hanok.png',
+  'place/gull':    'art/place-gull.png',
+  'place/dol':     'art/place-dol.png',
+  'place/shop':    'art/place-shop.png',
+  'place/home':    'art/place-home.png',
+  'place/bus':     'art/place-bus.png',
+  'place/port':    'art/place-port.png',
+
+  'furniture/bed':     'art/furniture-bed.png',
+  'furniture/desk':    'art/furniture-desk.png',
+  'furniture/chair':   'art/furniture-chair.png',
+  'furniture/plant':   'art/furniture-plant.png',
+  'furniture/rug':     'art/furniture-rug.png',
+  'furniture/lamp':    'art/furniture-lamp.png',
+  'furniture/shelf':   'art/furniture-shelf.png',
+  'furniture/cushion': 'art/furniture-cushion.png',
+  'furniture/frame':   'art/furniture-frame.png',
+  'furniture/shell':   'art/furniture-shell.png',
+  'furniture/lake':    'art/furniture-lake.png',
+  'furniture/pine':    'art/furniture-pine.png',
+  'furniture/tile':    'art/furniture-tile.png',
+  'furniture/fan':     'art/furniture-fan.png',
+  'furniture/gullm':   'art/furniture-gullm.png',
+  'furniture/dolm':    'art/furniture-dolm.png',
+
+  'item/gimbap': 'art/item-gimbap.png',
+  'item/milk':   'art/item-milk.png',
+  'item/ramen':  'art/item-ramen.png',
+  'item/choco':  'art/item-choco.png',
+  'item/drink':  'art/item-drink.png',
+  'item/banana': 'art/item-banana.png',
+  'item/flour':  'art/item-flour.png',
+  'item/butter': 'art/item-butter.png',
+  'item/sugar':  'art/item-sugar.png',
+  'item/egg':    'art/item-egg.png',
+  'item/cream':  'art/item-cream.png',
+  'item/berry':  'art/item-berry.png',
+
+  'stamp/seoul':     'art/stamp-seoul.png',
+  'stamp/incheon':   'art/stamp-incheon.png',
+  'stamp/chuncheon': 'art/stamp-chuncheon.png',
+  'stamp/gangneung': 'art/stamp-gangneung.png',
+  'stamp/gyeongju':  'art/stamp-gyeongju.png',
+  'stamp/jeonju':    'art/stamp-jeonju.png',
+  'stamp/busan':     'art/stamp-busan.png',
+  'stamp/jeju':      'art/stamp-jeju.png',
+
+  'goods/food':   'art/goods-food.png',
+  'goods/water':  'art/goods-water.png',
+  'goods/bed':    'art/goods-bed.png',
+  'goods/treat':  'art/goods-treat.png',
+  'goods/wheel':  'art/goods-wheel.png',
+  'goods/tunnel': 'art/goods-tunnel.png',
+
+  'work/galbi':   'art/work-galbi.png',
+  'work/cup':     'art/work-cup.png',
+  'work/pitcher': 'art/work-pitcher.png',
+  'work/orange':  'art/work-orange.png',
+  'work/basket':  'art/work-basket.png',
+
+  'luggage/r':    'art/luggage-r.png',
+  'luggage/b':    'art/luggage-b.png',
+  'luggage/y':    'art/luggage-y.png',
+
+  'fish/mackerel': 'art/fish-mackerel.png',
+  'fish/squid':    'art/fish-squid.png',
+  'fish/crab':     'art/fish-crab.png',
+
+  'scenery/city':  'art/scenery-city.png',
+  'scenery/sea':   'art/scenery-sea.png',
+  'scenery/lake':  'art/scenery-lake.png',
+  'scenery/field': 'art/scenery-field.png',
+  'bg/street-incheon':  'art/bg-street-incheon.png',
+  'bg/street-seoul':    'art/bg-street-seoul.png',
+  'bg/street-gyeongju': 'art/bg-street-gyeongju.png',
+  'bg/street-chuncheon':'art/bg-street-chuncheon.png',
+  'bg/street-gangneung':'art/bg-street-gangneung.png',
+  'bg/street-jeonju':   'art/bg-street-jeonju.png',
+  'bg/street-busan':    'art/bg-street-busan.png',
+  'bg/street-jeju':     'art/bg-street-jeju.png'
+};
+
+const GROUPS = {
+  hamster:'햄찌', item:'편의점 재료', goods:'상점 물건', place:'장소',
+  luggage:'공항 수하물', fish:'어시장 물고기', work:'일하기 소품', scenery:'창밖 풍경', stamp:'도장',
+  furniture:'가구', bg:'배경', look:'캐릭터 룩'
+};
+
+function art(id, px, half){
+  const slot = ART[id];
+  if(!slot) return blankArt();
+  const w = px || slot.box || 48;
+  const src = ART_SRC[id];
+  const inner = src ? '<img src="' + src + '" alt="">' : placeholderFor(id);
+  const ratio = half ? (slot.w + ' / ' + slot.w) : (slot.w + ' / ' + slot.h);
+  return '<span class="art' + (half ? ' half' : '') +
+    '" style="width:' + w + 'px; aspect-ratio:' + ratio + '">' + inner + '</span>';
+}
+
+/* 임시 그림. 진짜 그림이 다 들어오면 이 아래 함수들은 통째로 지웁니다. */
+function placeholderFor(id){
+  const cut = id.indexOf('/');
+  const group = id.slice(0, cut), key = id.slice(cut + 1);
+  if(group === 'hamster') return hamsterSVG(key);
+  if(group === 'item')    return itemSVG(key);
+  if(group === 'place')   return placeSVG(key);
+  if(group === 'goods')   return goodsSVG(key);
+  if(group === 'luggage') return lugSVG(lugColor(key));
+  if(group === 'fish')    return fishSVG(key);
+  if(group === 'work')    return workSVG(key);
+  if(group === 'scenery') return sceneryHTML(key);
+  if(group === 'stamp')   return stampSVG(key);
+  if(group === 'look')    return charSVG(key);
+  if(group === 'furniture') return furnSVG(key);
+  return blankArt();
+}
+function lugColor(key){
+  const c = COLORS.filter(function(x){ return x.id === key; })[0];
+  return c ? c.css : 'var(--line)';
+}
+function sceneryKind(to){
+  if(to === 'incheon' || to === 'gangneung' || to === 'busan' || to === 'jeju') return 'sea';
+  if(to === 'chuncheon') return 'lake';
+  if(to === 'gyeongju' || to === 'jeonju') return 'field';
+  return 'city';
+}
+function sceneryArt(to){
+  const kind = sceneryKind(to);
+  const src = ART_SRC['scenery/' + kind];
+  return src ? '<img src="' + src + '" alt="">' : sceneryHTML(kind);
+}
+function blankArt(){
+  return '<svg viewBox="0 0 100 100" aria-hidden="true">' +
+    '<rect x="3" y="3" width="94" height="94" rx="12" fill="var(--sunk)" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 6"/>' +
+    '<circle cx="36" cy="38" r="8" fill="var(--line)"/>' +
+    '<path d="M24 70 l18 -22 13 15 9 -10 15 17z" fill="var(--line)"/>' +
+    '</svg>';
+}
+function goodsSVG(key){
+  const s = '<svg viewBox="0 0 60 60" aria-hidden="true">';
+  const e = '</svg>';
+  if(key === 'food')   return s + '<rect x="14" y="10" width="32" height="8" rx="3" fill="#C9A878"/><path d="M14 16 h32 v32 a5 5 0 0 1 -5 5 h-22 a5 5 0 0 1 -5 -5z" fill="#E3C79A"/><circle cx="30" cy="36" r="8" fill="#F5E8CE"/>' + e;
+  if(key === 'water')  return s + '<rect x="23" y="7" width="14" height="9" rx="3" fill="#9FC7DC"/><path d="M18 17 h24 v31 a5 5 0 0 1 -5 5 h-14 a5 5 0 0 1 -5 -5z" fill="#CDE6F2"/><rect x="18" y="30" width="24" height="11" fill="#9FC7DC"/>' + e;
+  if(key === 'bed')    return s + '<path d="M7 47 q11 -18 23 -18 t23 18z" fill="#E8D3AE"/><rect x="17" y="37" width="10" height="4" rx="2" fill="#CDB287"/><rect x="33" y="40" width="10" height="4" rx="2" fill="#CDB287"/><rect x="25" y="44" width="10" height="4" rx="2" fill="#CDB287"/>' + e;
+  if(key === 'treat')  return s + '<ellipse cx="22" cy="33" rx="7" ry="11" fill="#5F4B3A"/><ellipse cx="37" cy="29" rx="7" ry="11" fill="#6F5847"/><ellipse cx="30" cy="45" rx="7" ry="11" fill="#7D6554"/>' + e;
+  if(key === 'wheel')  return s + '<circle cx="30" cy="30" r="21" fill="none" stroke="#A9C8B6" stroke-width="5"/><path d="M30 11 V49 M11 30 H49 M17 17 L43 43 M43 17 L17 43" stroke="#A9C8B6" stroke-width="3"/><circle cx="30" cy="30" r="5" fill="#A9C8B6"/>' + e;
+  return s + '<path d="M7 48 v-11 a23 23 0 0 1 46 0 v11z" fill="#E8B8A6"/><path d="M20 48 v-11 a10 10 0 0 1 20 0 v11z" fill="#9A6E5E"/>' + e;
+}
+function furnSVG(key){
+  const s = '<svg viewBox="0 0 60 60" aria-hidden="true">';
+  const e = '</svg>';
+  if(key === 'bed')     return s + '<rect x="6" y="30" width="48" height="20" rx="4" fill="#B98E6A"/><rect x="10" y="22" width="18" height="12" rx="4" fill="#F4EDE4"/><rect x="28" y="26" width="24" height="12" rx="4" fill="#89A9C4"/><rect x="6" y="46" width="48" height="6" rx="3" fill="#9A724F"/>' + e;
+  if(key === 'desk')    return s + '<rect x="6" y="24" width="48" height="8" rx="3" fill="#C49A6C"/><rect x="10" y="32" width="6" height="20" rx="2" fill="#9A724F"/><rect x="44" y="32" width="6" height="20" rx="2" fill="#9A724F"/><rect x="30" y="32" width="18" height="14" rx="2" fill="#B5885C"/>' + e;
+  if(key === 'chair')   return s + '<rect x="17" y="14" width="26" height="22" rx="6" fill="#8FB7A2"/><rect x="15" y="34" width="30" height="7" rx="3" fill="#73A089"/><rect x="18" y="41" width="5" height="12" rx="2" fill="#73A089"/><rect x="37" y="41" width="5" height="12" rx="2" fill="#73A089"/>' + e;
+  if(key === 'plant')   return s + '<path d="M20 36 h20 l-3 17 h-14z" fill="#C97F5E"/><circle cx="30" cy="23" r="11" fill="#6FA87F"/><circle cx="21" cy="30" r="7" fill="#80BB8F"/><circle cx="39" cy="30" r="7" fill="#80BB8F"/>' + e;
+  if(key === 'rug')     return s + '<ellipse cx="30" cy="34" rx="25" ry="15" fill="#D98A7E"/><ellipse cx="30" cy="34" rx="15" ry="8" fill="#F2CDAD"/>' + e;
+  if(key === 'lamp')    return s + '<path d="M18 11 h24 l6 15 h-36z" fill="#F2D79A"/><rect x="28" y="26" width="4" height="22" fill="#9A8B74"/><ellipse cx="30" cy="50" rx="12" ry="4" fill="#9A8B74"/>' + e;
+  if(key === 'shelf')   return s + '<rect x="10" y="9" width="40" height="44" rx="4" fill="#C49A6C"/><rect x="14" y="22" width="32" height="4" fill="#9A724F"/><rect x="14" y="36" width="32" height="4" fill="#9A724F"/><rect x="17" y="12" width="5" height="10" fill="#D98A7E"/><rect x="24" y="12" width="5" height="10" fill="#89A9C4"/><rect x="17" y="26" width="5" height="10" fill="#8FB7A2"/>' + e;
+  if(key === 'cushion') return s + '<rect x="12" y="20" width="36" height="28" rx="11" fill="#E6A9A0"/><circle cx="30" cy="34" r="5" fill="#F5D6CF"/>' + e;
+  if(key === 'frame')   return s + '<rect x="9" y="13" width="42" height="32" rx="4" fill="#C49A6C"/><rect x="14" y="18" width="32" height="22" fill="#A8CBE0"/><path d="M14 33 q9 -9 16 -2 q8 6 16 -1 v10 h-32z" fill="#6FA87F"/>' + e;
+  if(key === 'lake')    return s + '<rect x="9" y="13" width="42" height="32" rx="4" fill="#9A8B74"/><rect x="14" y="18" width="32" height="22" fill="#CFE3EC"/><path d="M14 30 L22 20 L29 30 Z" fill="#8FA7A0"/><path d="M26 31 L34 19 L42 31 Z" fill="#7E968F"/><rect x="14" y="31" width="32" height="9" fill="#7FB4C9"/>' + e;
+  if(key === 'pine')    return s + '<path d="M22 38 h16 l-3 15 h-10z" fill="#C97F5E"/><path d="M30 10 l9 14 h-18z" fill="#5E8A68"/><path d="M30 19 l11 17 h-22z" fill="#6FA87F"/><path d="M30 28 l13 12 h-26z" fill="#5E8A68"/>' + e;
+  if(key === 'tile')  return s + '<path d="M6 36 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 v10 h-48z" fill="#6B6F73"/><path d="M6 26 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 v10 q-8 -8 -16 0 q-8 -8 -16 0 q-8 -8 -16 0z" fill="#7E8286"/>' + e;
+  if(key === 'fan')   return s + '<path d="M30 48 a24 24 0 0 1 -20 -34 l20 10 l20 -10 a24 24 0 0 1 -20 34z" fill="#F3EDD8" stroke="#C08359" stroke-width="2"/><path d="M30 48 v-24 M30 24 l-12 -6 M30 24 l12 -6" stroke="#C08359" stroke-width="2"/>' + e;
+  if(key === 'gullm') return s + '<path d="M6 10 h48" stroke="#9A8B74" stroke-width="2"/><path d="M14 14 q6 -6 12 0 q6 -6 12 0 q-6 -2 -12 4 q-6 -6 -12 -4z" fill="#F2F4F6" stroke="#B6C2CA" stroke-width="1.5"/><path d="M20 20 v8 M40 20 v14" stroke="#9A8B74" stroke-width="1.5"/><path d="M14 32 q6 -6 12 0 q-6 2 -12 0z" fill="#F2F4F6"/><path d="M34 38 q6 -6 12 0 q-6 2 -12 0z" fill="#F2F4F6"/>' + e;
+  if(key === 'dolm')  return s + '<ellipse cx="30" cy="34" rx="13" ry="16" fill="#7E8286"/><path d="M19 18 h22 v6 h-22z" fill="#6B6F73"/><circle cx="25" cy="31" r="2.6" fill="#4A4E52"/><circle cx="35" cy="31" r="2.6" fill="#4A4E52"/><ellipse cx="30" cy="38" rx="3.5" ry="4.5" fill="#6B6F73"/><rect x="22" y="48" width="16" height="5" rx="2" fill="#9A9EA2"/>' + e;
+  return s + '<path d="M30 10 v9" stroke="#9A8B74" stroke-width="2" fill="none"/><path d="M17 46 q13 -28 26 0z" fill="#F4DFCA"/><path d="M30 21 v25 M23 32 l7 -11 M37 32 l-7 -11" stroke="#D8BFA2" stroke-width="2" fill="none"/>' + e;
+}
+function stampSVG(key){
+  const nm = (CITIES[key] || {}).name || '';
+  return '<svg viewBox="0 0 100 100" aria-hidden="true">' +
+    '<circle cx="50" cy="50" r="43" fill="none" stroke="var(--coral)" stroke-width="4" stroke-dasharray="8 7"/>' +
+    '<text x="50" y="60" text-anchor="middle" font-family="Jua, sans-serif" font-size="30" fill="var(--coral)">' + nm + '</text>' +
+    '</svg>';
+}
+
+/* ---------- 옷 ----------
+   얼굴과 몸은 늘 같은 아이이고, 옷과 소품만 바뀝니다.
+   그래서 룩 하나가 그림 한 장이고, 늘려도 코드가 바뀌지 않습니다. */
+const LOOKS = [
+  { id:'1', name:'노란 후드',      city:'seoul',   price:200 },
+  { id:'2', name:'파란 멜빵바지',  city:'seoul',   price:200 },
+  { id:'3', name:'한강 바람막이',  city:'seoul',   price:200 },
+  { id:'4', name:'서울 밤나들이',  city:'seoul',   price:600 },
+  { id:'5', name:'줄무늬 바다옷',  city:'incheon', price:200 },
+  { id:'6', name:'공항 승무원 옷', city:'incheon', price:600 },
+  { id:'7', name:'호수 바람막이',  city:'chuncheon', price:200 },
+  { id:'8', name:'레일바이크 옷',  city:'chuncheon', price:600 },
+  { id:'9', name:'솔숲 니트',      city:'gangneung', price:200 },
+  { id:'10', name:'파도무늬 옷',   city:'gangneung', price:600 },
+  { id:'11', name:'기와무늬 저고리', city:'gyeongju', price:200 },
+  { id:'12', name:'벚꽃 두루마기',   city:'gyeongju', price:600 },
+  { id:'13', name:'부채 든 한복',    city:'jeonju',   price:200 },
+  { id:'14', name:'비빔밥집 앞치마', city:'jeonju',   price:600 },
+  { id:'15', name:'갈매기 티셔츠',   city:'busan',    price:200 },
+  { id:'16', name:'어시장 장화 옷',  city:'busan',    price:600 },
+  { id:'17', name:'유채꽃 옷',       city:'jeju',     price:200 },
+  { id:'18', name:'귤모자 옷',       city:'jeju',     price:600 }
+];
+function lookById(id){
+  return LOOKS.filter(function(L){ return L.id === id; })[0];
+}
+
+/* ---------- 가구와 집 ----------
+   격자는 6칸 × 4줄입니다. 벽지와 바닥은 사각형이라 코드로 색을 칠합니다. */
+const FURN = [
+  { id:'bed',     name:'침대',      price:600 },
+  { id:'desk',    name:'책상',      price:400 },
+  { id:'chair',   name:'의자',      price:200 },
+  { id:'plant',   name:'화분',      price:150 },
+  { id:'rug',     name:'러그',      price:300 },
+  { id:'lamp',    name:'램프',      price:250 },
+  { id:'shelf',   name:'책장',      price:500 },
+  { id:'cushion', name:'쿠션',      price:100 },
+  { id:'frame',   name:'한강 액자', price:350, city:'seoul' },
+  { id:'shell',   name:'조개 모빌', price:350, city:'incheon' },
+  { id:'lake',    name:'호수 사진', price:350, city:'chuncheon' },
+  { id:'pine',    name:'솔방울 화분', price:350, city:'gangneung' },
+  { id:'tile',    name:'기와 모형',   price:350, city:'gyeongju' },
+  { id:'fan',     name:'부채 장식',   price:350, city:'jeonju' },
+  { id:'gullm',   name:'갈매기 모빌', price:350, city:'busan' },
+  { id:'dolm',    name:'돌하르방 인형', price:350, city:'jeju' }
+];
+/* 룩 아트 36칸은 LOOKS 에서 만듭니다. 손으로 적으면 옷을 더할 때마다
+   LOOKS 와 ART 두 곳을 고쳐야 하고, 한쪽만 고치면 그 칸이 조용히 비어 있습니다. */
+const SEXES = [{id:'b', name:'남자'}, {id:'g', name:'여자'}];
+LOOKS.forEach(function(L){
+  SEXES.forEach(function(x){
+    ART['look/' + x.id + '/' + L.id] =
+      {name: L.name + ' (' + x.name + ')', w:512, h:1024, box:56, bg:'투명', use:'지금'};
+  });
+});
+/* 입을 사람의 성별까지 붙여 아트 열쇠를 만듭니다. 아홉 군데가 같은 줄을
+   들고 있었어서, 이름 만드는 자리를 하나로 모읍니다. */
+function lookId(id, sex){ return 'look/' + (sex || S.me.sex || 'b') + '/' + id; }
+function meLook(){ return lookId(S.me.look); }
+
+const WALLS  = ['#F4E7D3','#E2EEF3','#F3E2E8','#E8F0E2'];
+const FLOORS = ['#D9B98E','#C6A179','#C3CBD0','#E2D7C6'];
+const HOME_PRICE = 1500;
+const CELLS = 24;
+
+function home(){ return S.homes[S.city]; }
+function placedCount(id){
+  let n = 0;
+  Object.keys(S.homes).forEach(function(k){
+    const c = S.homes[k].cells || {};
+    Object.keys(c).forEach(function(i){ if(c[i] === id) n++; });
+  });
+  return n;
+}
+function freeCount(id){ return (S.furn[id] || 0) - placedCount(id); }
+function furnName(id){
+  const f = FURN.filter(function(x){ return x.id === id; })[0];
+  return f ? f.name : '가구';
+}
+function homeSub(){
+  const h = home();
+  if(!h.owned) return '사면 꾸밀 수 있어요 · ' + won(HOME_PRICE);
+  const s = (h.sign || '').trim();
+  /* 돌아간 값이 거리 화면에서 innerHTML 로 들어갑니다. 문패는 아이가 적는 글입니다 */
+  return s ? (esc(s) + ' · 가구 놓기') : '가구 놓고 꾸미기';
+}
+
+const LOOK_ART = {
+  '1': { top:'#F0C04A', bottom:'#7089A6', extra:'hood' },
+  '2': { top:'#6B9BD2', bottom:'#4F7CB4', extra:'strap' },
+  '3': { top:'#73BFA0', bottom:'#4C6B7C', extra:'cap' },
+  '4': { top:'#4A4E7A', bottom:'#32365C', extra:'star' },
+  '5': { top:'#F2EDE0', bottom:'#5FA6C9', extra:'stripe' },
+  '6': { top:'#3C5A8A', bottom:'#2C4268', extra:'scarf' },
+  '7': { top:'#86B5C4', bottom:'#4E7384', extra:'hood' },
+  '8': { top:'#E0875C', bottom:'#3E4A57', extra:'cap' },
+  '9': { top:'#D9CFB4', bottom:'#6E7F63', extra:'scarf' },
+  '10': { top:'#5E9FC4', bottom:'#F0EAD9', extra:'stripe' },
+  '11': { top:'#E8E2D4', bottom:'#6B6F76', extra:'strap' },
+  '12': { top:'#F0C3CE', bottom:'#C98B9E', extra:'hood' },
+  '13': { top:'#F3EDD8', bottom:'#A4B8C4', extra:'star' },
+  '14': { top:'#C9604F', bottom:'#4A4238', extra:'stripe' },
+  '15': { top:'#EFF3F5', bottom:'#4E7A99', extra:'cap' },
+  '16': { top:'#3E6B74', bottom:'#E0C25B', extra:'scarf' },
+  '17': { top:'#F2DE72', bottom:'#8FA86A', extra:'hood' },
+  '18': { top:'#F0A04B', bottom:'#4C7A4A', extra:'cap' }
+};
+function extraArt(kind, top, bottom){
+  if(kind === 'hood')   return '<path d="M34 104 q26 20 52 0 q-3 22 -26 22 q-23 0 -26 -22z" fill="' + bottom + '"/>';
+  if(kind === 'strap')  return '<rect x="44" y="106" width="7" height="34" rx="3" fill="#FFFFFF" opacity="0.55"/>' +
+                               '<rect x="69" y="106" width="7" height="34" rx="3" fill="#FFFFFF" opacity="0.55"/>';
+  if(kind === 'cap')    return '<path d="M22 54 a38 34 0 0 1 76 0 z" fill="' + bottom + '"/>' +
+                               '<rect x="96" y="48" width="20" height="8" rx="4" fill="' + bottom + '"/>';
+  if(kind === 'star')   return '<path d="M60 122 l5 -12 5 12 12 5 -12 5 -5 12 -5 -12 -12 -5z" fill="#F3D27A"/>';
+  if(kind === 'stripe') return '<rect x="32" y="126" width="56" height="8" fill="' + bottom + '"/>' +
+                               '<rect x="32" y="142" width="56" height="8" fill="' + bottom + '"/>';
+  return '<path d="M38 102 q22 16 44 0 q-2 15 -22 15 q-20 0 -22 -15z" fill="#CF6B5C"/>' +
+         '<rect x="56" y="112" width="10" height="24" rx="5" fill="#CF6B5C"/>';
+}
+function charSVG(key, hairCol, mood){
+  /* 열쇠가 'b/1' 모양입니다. 성별을 떼고 옷만 LOOK_ART 에서 찾습니다.
+     hairCol·mood 는 손님을 그릴 때만 넘어옵니다. 안 넘기면 아이 캐릭터 그대로입니다. */
+  const cut = key.indexOf('/');
+  const sex = cut < 0 ? 'b' : key.slice(0, cut);
+  const L = LOOK_ART[cut < 0 ? key : key.slice(cut + 1)] || LOOK_ART['1'];
+  const skin = '#F6D9BE', hair = hairCol || '#6B4A37';
+  let s = '<svg viewBox="0 0 120 240" aria-hidden="true">';
+  s += '<ellipse cx="60" cy="233" rx="33" ry="6" fill="#2C3A35" opacity="0.12"/>';
+  s += '<rect x="45" y="158" width="14" height="58" rx="7" fill="' + L.bottom + '"/>';
+  s += '<rect x="61" y="158" width="14" height="58" rx="7" fill="' + L.bottom + '"/>';
+  s += '<ellipse cx="52" cy="220" rx="11" ry="7" fill="#50504E"/>';
+  s += '<ellipse cx="68" cy="220" rx="11" ry="7" fill="#50504E"/>';
+  s += '<rect x="24" y="112" width="13" height="48" rx="6.5" fill="' + L.top + '"/>';
+  s += '<rect x="83" y="112" width="13" height="48" rx="6.5" fill="' + L.top + '"/>';
+  s += '<circle cx="30.5" cy="160" r="8" fill="' + skin + '"/>';
+  s += '<circle cx="89.5" cy="160" r="8" fill="' + skin + '"/>';
+  s += '<rect x="32" y="106" width="56" height="62" rx="18" fill="' + L.top + '"/>';
+  /* 긴 머리는 얼굴보다 먼저 그려야 뒤로 갑니다 */
+  if(sex === 'g') s += '<path d="M17 68 a43 43 0 0 1 86 0 v58 q-11 7 -16 -3 l-4 -55 h-46 l-4 55 q-5 10 -16 3z" fill="' + hair + '"/>';
+  s += '<circle cx="60" cy="66" r="42" fill="' + skin + '"/>';
+  s += '<path d="M18 64 a42 42 0 0 1 84 0 q-9 -17 -21 -11 q-13 -19 -43 -7 q-14 6 -20 18z" fill="' + hair + '"/>';
+  s += '<circle cx="34" cy="80" r="6.5" fill="#F0AFA2" opacity="0.55"/>';
+  s += '<circle cx="86" cy="80" r="6.5" fill="#F0AFA2" opacity="0.55"/>';
+  /* 눈과 입은 이 함수 안에서만 자리를 압니다. 밖에서 덮으면 좌표가 두 군데로 갈라집니다. */
+  if(mood === 'glad'){
+    s += '<path d="M40 75 q6 -9 12 0" fill="none" stroke="#3E3028" stroke-width="4" stroke-linecap="round"/>';
+    s += '<path d="M68 75 q6 -9 12 0" fill="none" stroke="#3E3028" stroke-width="4" stroke-linecap="round"/>';
+    s += '<path d="M52 84 q8 10 16 0" fill="none" stroke="#C97B6B" stroke-width="3.5" stroke-linecap="round"/>';
+  }else if(mood === 'sad'){
+    s += '<ellipse cx="46" cy="74" rx="5.5" ry="4" fill="#3E3028"/><ellipse cx="74" cy="74" rx="5.5" ry="4" fill="#3E3028"/>';
+    s += '<path d="M53 88 h14" fill="none" stroke="#C97B6B" stroke-width="3.5" stroke-linecap="round"/>';
+  }else{
+    s += '<circle cx="46" cy="72" r="5.5" fill="#3E3028"/><circle cx="74" cy="72" r="5.5" fill="#3E3028"/>';
+    s += '<circle cx="47.6" cy="70" r="1.8" fill="#FFFFFF"/><circle cx="75.6" cy="70" r="1.8" fill="#FFFFFF"/>';
+    s += '<circle cx="60" cy="86" r="3" fill="#C97B6B"/>';
+  }
+  s += extraArt(L.extra, L.top, L.bottom);
+  return s + '</svg>';
+}
+
+/* ---------- 임시 그림 ---------- */
+function eyes(kind){
+  if(kind === 'sleep' || kind === 'eat' || kind === 'glad'){
+    return '<path d="M72 92 q8 -9 16 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>' +
+           '<path d="M112 92 q8 -9 16 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>';
+  }
+  if(kind === 'sad'){
+    return '<ellipse cx="80" cy="94" rx="6" ry="5" fill="var(--face)"/>' +
+           '<ellipse cx="120" cy="94" rx="6" ry="5" fill="var(--face)"/>';
+  }
+  return '<circle cx="80" cy="92" r="6.5" fill="var(--face)"/>' +
+         '<circle cx="120" cy="92" r="6.5" fill="var(--face)"/>' +
+         '<circle cx="82" cy="90" r="2" fill="#fff"/>' +
+         '<circle cx="122" cy="90" r="2" fill="#fff"/>';
+}
+function mouth(kind){
+  if(kind === 'eat')   return '<ellipse cx="100" cy="116" rx="9" ry="8" fill="#C4705F"/>';
+  if(kind === 'glad')  return '<path d="M88 112 q12 14 24 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>';
+  if(kind === 'sad')   return '<path d="M90 118 q10 -8 20 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>';
+  if(kind === 'sleep') return '<path d="M94 115 q6 6 12 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>';
+  return '<path d="M92 112 q8 8 16 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>';
+}
+function hamsterSVG(kind){
+  const zzz = kind === 'sleep'
+    ? '<text x="156" y="48" font-family="Jua, sans-serif" font-size="22" fill="var(--ink-soft)">Z</text>' +
+      '<text x="174" y="30" font-family="Jua, sans-serif" font-size="16" fill="var(--ink-soft)">z</text>'
+    : '';
+  const spark = kind === 'glad'
+    ? '<path d="M36 52 l4 -10 4 10 10 4 -10 4 -4 10 -4 -10 -10 -4z" fill="var(--sun)"/>' +
+      '<path d="M166 72 l3 -7 3 7 7 3 -7 3 -3 7 -3 -7 -7 -3z" fill="var(--sun)"/>'
+    : '';
+  const seeds = kind === 'eat'
+    ? '<ellipse cx="100" cy="146" rx="6" ry="4" fill="var(--fur-dark)"/>'
+    : '';
+  return '<svg class="hamster' + (kind === 'glad' || kind === 'eat' ? ' bounce' : '') + '" viewBox="0 0 200 172" role="img" aria-label="햄스터">' +
+    zzz + spark +
+    '<ellipse cx="100" cy="158" rx="54" ry="8" fill="var(--sunk)"/>' +
+    '<circle cx="64" cy="58" r="17" fill="var(--fur)"/>' +
+    '<circle cx="64" cy="58" r="9" fill="var(--blush)"/>' +
+    '<circle cx="136" cy="58" r="17" fill="var(--fur)"/>' +
+    '<circle cx="136" cy="58" r="9" fill="var(--blush)"/>' +
+    '<ellipse cx="100" cy="100" rx="62" ry="54" fill="var(--fur)"/>' +
+    '<ellipse cx="100" cy="116" rx="40" ry="34" fill="var(--fur-light)"/>' +
+    '<ellipse cx="62" cy="106" rx="12" ry="9" fill="var(--blush)" opacity="0.55"/>' +
+    '<ellipse cx="138" cy="106" rx="12" ry="9" fill="var(--blush)" opacity="0.55"/>' +
+    eyes(kind) +
+    '<ellipse cx="100" cy="105" rx="5" ry="4" fill="#C4705F"/>' +
+    mouth(kind) +
+    '<ellipse cx="78" cy="150" rx="13" ry="8" fill="var(--fur-dark)"/>' +
+    '<ellipse cx="122" cy="150" rx="13" ry="8" fill="var(--fur-dark)"/>' +
+    seeds +
+    '</svg>';
+}
+function itemSVG(id){
+  const s = '<svg viewBox="0 0 60 60" width="44" height="44" aria-hidden="true">';
+  const e = '</svg>';
+  if(id === 'gimbap') return s + '<path d="M30 10 L52 48 H8 Z" fill="var(--fur-light)"/><rect x="18" y="36" width="24" height="12" rx="3" fill="#4C5F57"/>' + e;
+  if(id === 'milk')   return s + '<path d="M18 20 L30 10 L42 20 V50 H18 Z" fill="#EFF6FB"/><rect x="18" y="30" width="24" height="9" fill="var(--sky)"/>' + e;
+  if(id === 'ramen')  return s + '<path d="M16 20 H44 L40 50 H20 Z" fill="#F4E3C8"/><ellipse cx="30" cy="20" rx="15" ry="5" fill="var(--coral)"/>' + e;
+  if(id === 'choco')  return s + '<rect x="14" y="18" width="32" height="24" rx="6" fill="#7A5240"/><rect x="20" y="24" width="7" height="12" rx="2" fill="#9C6B52"/><rect x="33" y="24" width="7" height="12" rx="2" fill="#9C6B52"/>' + e;
+  if(id === 'drink')  return s + '<rect x="24" y="8" width="12" height="8" rx="2" fill="var(--sage)"/><path d="M20 18 H40 V48 a4 4 0 0 1 -4 4 H24 a4 4 0 0 1 -4 -4 Z" fill="var(--sage)" opacity="0.75"/>' + e;
+  if(id === 'flour')  return s + '<path d="M16 16 h28 v30 a5 5 0 0 1 -5 5 h-18 a5 5 0 0 1 -5 -5z" fill="#EDE4D2"/><path d="M16 16 q14 -8 28 0" fill="#DCCFB6"/><circle cx="30" cy="34" r="7" fill="#D4C5A6"/>' + e;
+  if(id === 'butter') return s + '<path d="M10 24 h34 l6 -8 h-34z" fill="#F6E08A"/><rect x="10" y="24" width="34" height="18" fill="#EFD268"/><path d="M44 24 l6 -8 v18 l-6 8z" fill="#E3C14F"/>' + e;
+  if(id === 'sugar')  return s + '<rect x="14" y="20" width="32" height="26" rx="4" fill="#F2F0EA"/><rect x="20" y="26" width="8" height="8" rx="2" fill="#DCD8CC"/><rect x="32" y="26" width="8" height="8" rx="2" fill="#DCD8CC"/><rect x="26" y="36" width="8" height="8" rx="2" fill="#DCD8CC"/>' + e;
+  if(id === 'egg')    return s + '<ellipse cx="30" cy="34" rx="15" ry="19" fill="#F7EFE2"/><ellipse cx="25" cy="28" rx="5" ry="6" fill="#FFFFFF" opacity="0.8"/>' + e;
+  if(id === 'cream')  return s + '<path d="M20 48 h20 l-2 -12 h-16z" fill="#E6DCC8"/><path d="M30 10 q10 8 8 16 q-2 8 -8 10 q-6 -2 -8 -10 q-2 -8 8 -16z" fill="#FFFBF2"/>' + e;
+  if(id === 'berry')  return s + '<path d="M30 50 q-14 -8 -14 -20 a14 14 0 0 1 28 0 q0 12 -14 20z" fill="#D9453F"/><path d="M24 14 h12 l-6 8z" fill="#5E8A68"/><circle cx="25" cy="30" r="1.8" fill="#F7E7A0"/><circle cx="34" cy="34" r="1.8" fill="#F7E7A0"/>' + e;
+  return s + '<path d="M14 36 q16 18 34 2 q-6 16 -22 16 q-14 0 -12 -18z" fill="var(--sun)"/>' + e;
+}
+
+function fishSVG(key){
+  const s = '<svg viewBox="0 0 60 60" aria-hidden="true">';
+  const e = '</svg>';
+  if(key === 'mackerel') return s + '<path d="M6 30 q14 -14 30 -8 q12 5 18 8 q-6 3 -18 8 q-16 6 -30 -8z" fill="#6E93B8"/><path d="M6 30 l-2 -9 l10 6z" fill="#51708F"/><circle cx="40" cy="28" r="2.5" fill="#1F2A33"/><path d="M16 24 q8 6 0 12" fill="none" stroke="#51708F" stroke-width="2"/>' + e;
+  if(key === 'squid')    return s + '<ellipse cx="30" cy="22" rx="13" ry="15" fill="#E3D3BE"/><path d="M20 34 q2 14 -4 18 M26 36 q-1 14 -5 17 M34 36 q1 14 5 17 M40 34 q-2 14 4 18" fill="none" stroke="#E3D3BE" stroke-width="4" stroke-linecap="round"/><circle cx="25" cy="20" r="2.2" fill="#6B5B4A"/><circle cx="35" cy="20" r="2.2" fill="#6B5B4A"/>' + e;
+  return s + '<ellipse cx="30" cy="32" rx="16" ry="12" fill="#D96A4F"/><path d="M14 26 l-8 -6 M46 26 l8 -6" stroke="#D96A4F" stroke-width="4" stroke-linecap="round"/><path d="M16 40 l-8 8 M44 40 l8 8" stroke="#D96A4F" stroke-width="3" stroke-linecap="round"/><circle cx="24" cy="28" r="2.4" fill="#2B1C16"/><circle cx="36" cy="28" r="2.4" fill="#2B1C16"/>' + e;
+}
+function placeSVG(kind){
+  const s = '<svg viewBox="0 0 56 56" width="46" height="46" aria-hidden="true">';
+  const e = '</svg>';
+  if(kind === 'store') return s + '<rect x="6" y="18" width="44" height="30" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="6" y="14" width="44" height="8" rx="4" fill="var(--sage)"/><rect x="14" y="30" width="12" height="18" rx="2" fill="var(--sky)"/>' + e;
+  if(kind === 'shop')  return s + '<rect x="6" y="18" width="44" height="30" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="6" y="14" width="44" height="8" rx="4" fill="var(--sun)"/><circle cx="36" cy="36" r="7" fill="var(--coral)"/>' + e;
+  if(kind === 'home')  return s + '<path d="M28 8 L50 26 H42 V48 H14 V26 H6 Z" fill="var(--surface-2)" stroke="var(--line)"/><rect x="23" y="34" width="10" height="14" rx="2" fill="var(--coral)"/>' + e;
+  if(kind === 'air')   return s + '<path d="M5 31 L49 21 L45 34 L17 39 Z" fill="var(--sky)"/><path d="M25 22 L33 9 L38 11 L31 25 Z" fill="var(--sky)"/><rect x="8" y="45" width="40" height="4" rx="2" fill="var(--line)"/>' + e;
+  if(kind === 'sea')   return s + '<circle cx="41" cy="15" r="7" fill="var(--sun)"/><rect x="4" y="26" width="48" height="22" rx="6" fill="var(--sky)"/><path d="M4 33 q8 -6 16 0 t16 0 t16 0" fill="none" stroke="#fff" stroke-width="3" opacity="0.75"/>' + e;
+  if(kind === 'grill') return s + '<ellipse cx="28" cy="34" rx="22" ry="13" fill="#5A5F63"/><ellipse cx="28" cy="31" rx="18" ry="10" fill="#7A8186"/><circle cx="23" cy="30" r="4" fill="#D98A5E"/><circle cx="33" cy="33" r="4" fill="#D98A5E"/><rect x="46" y="30" width="10" height="4" rx="2" fill="#5A5F63"/>' + e;
+  if(kind === 'cafe')  return s + '<rect x="6" y="18" width="44" height="30" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="6" y="14" width="44" height="8" rx="4" fill="#B98E6A"/><path d="M18 30 h14 v8 a7 7 0 0 1 -14 0z" fill="#F4F0E8"/><path d="M32 32 h4 a4 4 0 0 1 0 8 h-4" fill="none" stroke="#F4F0E8" stroke-width="3"/>' + e;
+  if(kind === 'lake')  return s + '<path d="M4 30 L18 14 L30 30 Z" fill="#8FA7A0"/><path d="M24 32 L38 12 L52 32 Z" fill="#7E968F"/><rect x="4" y="32" width="48" height="16" rx="5" fill="var(--sky)"/><path d="M6 39 q8 -5 16 0 t16 0" fill="none" stroke="#fff" stroke-width="3" opacity="0.7"/>' + e;
+  if(kind === 'bakery') return s + '<rect x="6" y="18" width="44" height="30" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="6" y="14" width="44" height="8" rx="4" fill="#E0A05C"/><path d="M16 32 q6 -8 12 0 q6 -8 12 0 q0 10 -12 10 q-12 0 -12 -10z" fill="#D9A45E"/>' + e;
+  if(kind === 'bibim')  return s + '<rect x="6" y="18" width="44" height="30" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="6" y="14" width="44" height="8" rx="4" fill="#C4553C"/><circle cx="28" cy="35" r="10" fill="#E8D9BF" stroke="#C08359" stroke-width="3"/><circle cx="25" cy="33" r="3" fill="#7FA85E"/><circle cx="31" cy="37" r="3" fill="#D9A441"/>' + e;
+  if(kind === 'market') return s + '<path d="M4 20 h52 l-4 10 h-44z" fill="#6E93B8"/><rect x="8" y="30" width="44" height="18" rx="4" fill="var(--surface-2)" stroke="var(--line)"/><path d="M14 40 q8 -6 16 0 q-8 5 -16 0z" fill="#6E93B8"/><circle cx="38" cy="39" r="4" fill="#D96A4F"/>' + e;
+  if(kind === 'grove')  return s + '<rect x="26" y="34" width="8" height="18" fill="#9A7B5B"/><circle cx="30" cy="24" r="16" fill="#6FA87F"/><circle cx="23" cy="22" r="4" fill="#F0923B"/><circle cx="36" cy="26" r="4" fill="#F0923B"/><circle cx="31" cy="16" r="4" fill="#F0923B"/>' + e;
+  if(kind === 'tomb')   return s + '<path d="M4 46 q10 -26 26 -26 q16 0 26 26z" fill="#8FB58F"/><path d="M14 46 q6 -14 16 -14 q10 0 16 14z" fill="#A3C7A0"/><circle cx="46" cy="14" r="6" fill="var(--sun)"/>' + e;
+  if(kind === 'hanok')  return s + '<path d="M4 24 q26 -14 52 0 l-4 6 q-22 -11 -44 0z" fill="#6B5A4A"/><rect x="10" y="30" width="40" height="18" fill="var(--surface-2)" stroke="var(--line)"/><rect x="18" y="34" width="10" height="14" fill="#C08359"/><rect x="32" y="34" width="10" height="14" fill="#C08359"/>' + e;
+  if(kind === 'gull')   return s + '<path d="M4 30 q12 -14 24 -2 q12 -12 24 2 q-12 -4 -24 6 q-12 -10 -24 -6z" fill="#F2F4F6" stroke="#B6C2CA" stroke-width="2"/><rect x="4" y="42" width="52" height="8" rx="4" fill="var(--sky)"/>' + e;
+  if(kind === 'dol')    return s + '<ellipse cx="30" cy="36" rx="15" ry="18" fill="#7E8286"/><path d="M18 20 h24 v6 h-24z" fill="#6B6F73"/><circle cx="24" cy="32" r="3" fill="#4A4E52"/><circle cx="36" cy="32" r="3" fill="#4A4E52"/><ellipse cx="30" cy="40" rx="4" ry="5" fill="#6B6F73"/>' + e;
+  if(kind === 'port')   return s + '<path d="M10 32 h40 l-6 14 h-28z" fill="#C9603F"/><rect x="28" y="12" width="4" height="20" fill="#9A8B74"/><path d="M32 14 h14 l-14 10z" fill="#F2F0EA"/><rect x="4" y="46" width="52" height="6" rx="3" fill="var(--sky)"/>' + e;
+  return s + '<rect x="12" y="14" width="32" height="24" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="18" y="20" width="20" height="10" rx="2" fill="var(--sky)"/><circle cx="20" cy="44" r="5" fill="var(--ink-soft)"/><circle cx="36" cy="44" r="5" fill="var(--ink-soft)"/>' + e;
+}
+
+/* ---------- 도움 ---------- */
+const $ = function(id){ return document.getElementById(id); };
+/* 아이가 적은 글(이름·문패)이 innerHTML 로 들어가는 자리가 두 군데 있습니다.
+   꺾쇠를 그대로 두면 '<b>민지' 한 번에 카드가 깨지고, 태그가 진짜로 살아납니다.
+   혼자 하는 게임이라 노릴 사람은 없지만 2학년이 '<3' 적으면 뒷글자가 사라집니다. */
+function esc(s){
+  return String(s).replace(/[&<>"']/g, function(c){
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+function won(n){ return n.toLocaleString('ko-KR') + '원'; }
+/* 받침이 있으면 '이', 없으면 '가'. 서류에 쓰는 "쳇바퀴이(가)" 를 2학년이 소리 내 읽습니다 */
+function iga(s){
+  const t = String(s);
+  const c = t.charCodeAt(t.length - 1);
+  if(!(c >= 0xAC00 && c <= 0xD7A3)) return '가';
+  return ((c - 0xAC00) % 28) ? '이' : '가';
+}
+function clamp(n){ return Math.max(0, Math.min(100, n)); }
+function say(text, kind, hold){
+  $('say').textContent = text;
+  if(kind){
+    face = kind;
+    clearTimeout(faceTimer);
+    faceTimer = setTimeout(function(){ face = 'idle'; drawHamster(); }, hold || 1600);
+  }
+  drawHamster();
+}
+
+/* ---------- 그리기 ---------- */
+function moodWord(){
+  if(face === 'sleep') return T.sleeping;
+  if(S.hunger < 30) return T.hungry;
+  if(S.thirst < 30) return T.thirsty;
+  if(S.bed < 30) return T.dirty;
+  if(S.mood > 80) return T.happy;
+  return T.ok;
+}
+function moodFace(){
+  if(face !== 'idle') return face;
+  if(S.hunger < 30 || S.thirst < 30 || S.bed < 30) return 'sad';
+  if(S.mood > 80) return 'glad';
+  return 'idle';
+}
+function drawHamster(){
+  const k = moodFace();
+  $('ham').innerHTML = art('hamster/' + k, 200);
+  if(k === 'glad' || k === 'eat'){
+    const el = $('ham').firstChild;
+    if(el && el.classList) el.classList.add('bounce');
+  }
+}
+
+function drawStatus(){
+  $('money').textContent = won(S.money);
+  $('day').textContent = S.day + '일째';
+  $('works').textContent = S.works > 0 ? ('일할 수 있는 횟수 ' + S.works + '번') : '오늘 일은 끝';
+}
+
+function careButton(label, note, on, hot){
+  const b = document.createElement('button');
+  b.className = 'btn' + (hot ? ' pulse' : '');
+  b.innerHTML = '<span>' + label + '</span>' + (note ? '<small>' + note + '</small>' : '');
+  b.addEventListener('click', on);
+  return b;
+}
+function playButton(label, on, hot){
+  const b = document.createElement('button');
+  b.type = 'button';
+  if(hot) b.className = 'pulse';
+  b.textContent = label;
+  b.addEventListener('click', on);
+  return b;
+}
+function drawCare(){
+  const box = $('care');
+  const play = $('play');
+  const task = nextTask();
+  box.innerHTML = '';
+  play.innerHTML = '';
+  box.appendChild(careButton('밥 주기', S.inv.food + '개', function(){
+    if(S.inv.food <= 0){ say(T.noFood, null); return; }
+    S.inv.food--; S.hunger = 100; S.mood = clamp(S.mood + 8); S.today.fed = true;
+    say(T.eating, 'eat'); after();
+  }, task === 'fed'));
+  box.appendChild(careButton('물 주기', S.inv.water + '개', function(){
+    if(S.inv.water <= 0){ say(T.noWater, null); return; }
+    S.inv.water--; S.thirst = 100; S.mood = clamp(S.mood + 4);
+    say('꿀꺽꿀꺽', 'eat'); after();
+  }));
+  box.appendChild(careButton('톱밥 갈기', S.inv.bed + '개', function(){
+    if(S.inv.bed <= 0){ say(T.noBed, null); return; }
+    S.inv.bed--; S.bed = 100; S.mood = clamp(S.mood + 6);
+    say('폭신폭신해졌다', 'glad'); after();
+  }));
+  play.appendChild(playButton('쓰담', function(){
+    S.mood = clamp(S.mood + 12); S.today.played = true;
+    say(T.pet, 'glad'); after();
+  }, task === 'played'));
+  play.appendChild(playButton('간식 ' + S.inv.treat, function(){
+    if(S.inv.treat <= 0){ say(T.noTreat, null); return; }
+    S.inv.treat--; S.mood = clamp(S.mood + 20); S.hunger = clamp(S.hunger + 10); S.today.played = true;
+    say('볼주머니에 쏙!', 'eat'); after();
+  }));
+  if(S.owns.wheel){
+    play.appendChild(playButton('쳇바퀴', function(){
+      S.mood = clamp(S.mood + 15); S.today.played = true;
+      say('다다다다다!', 'glad'); after();
+    }));
+  }
+  if(S.owns.tunnel){
+    play.appendChild(playButton('터널', function(){
+      S.mood = clamp(S.mood + 15); S.today.played = true;
+      say('쏙 들어갔다 쏙!', 'glad'); after();
+    }));
+  }
+}
+
+function drawPlaces(){
+  const box = $('places');
+  box.innerHTML = '';
+  $('street-name').textContent = CITIES[S.city].name;
+  /* 그림이 온 도시만 띠가 뜹니다. 한 장씩 들어와도 그 도시부터 바로 바뀝니다 */
+  const bgEl = $('city-bg');
+  const bgSrc = ART_SRC['bg/street-' + S.city];
+  bgEl.classList.toggle('has', !!bgSrc);
+  bgEl.style.backgroundImage = bgSrc ? 'url("' + bgSrc + '")' : '';
+  function place(kind, nm, sub, on, locked, hot){
+    const b = document.createElement('button');
+    b.className = 'place' + (locked ? ' locked' : '') + (hot && !locked ? ' pulse' : '');
+    b.innerHTML = art('place/' + kind, 46) + '<span class="nm">' + nm + '<span class="sub">' + sub + '</span></span>';
+    if(!locked) b.addEventListener('click', on);
+    else b.disabled = true;
+    box.appendChild(b);
+  }
+  const task = nextTask();
+  const canWork = canAct() && S.works > 0;
+  const workSub = !canAct()
+    ? '오늘은 다 했어요. 내일 또 할 수 있어요'
+    : (S.works > 0
+        ? ('일하기 · 오늘 ' + S.works + '번 남음')
+        : '오늘 세 번 다 했어요. 내일 또 할 수 있어요');
+  const wp = WORKPLACE[S.city];
+  if(wp){
+    place(wp.kind, wp.name, workSub, function(){ if(canWork) wp.start(); }, !canWork, task === 'work');
+  }
+  place('shop', '상점', '햄찌 물건 사기', function(){ go('shop'); }, false, task === 'shopped');
+  place('home', '내 집', homeSub(), function(){ go('home'); }, false);
+
+  const sg = SIGHT[S.city];
+  if(sg){
+    place(sg.kind, sg.name, sg.sub, function(){
+      S.mood = clamp(S.mood + 10);
+      save();
+      go('hamster');
+      say(sg.say, 'glad', 2200);
+    }, false);
+  }
+
+  const near = cityOrder().filter(function(k){ return fareTo(S.city, k) > 0; });
+  const busSub = near.map(function(k){ return CITIES[k].name + ' ' + won(fareNow(S.city, k)); }).join(' · ');
+  const boat = near.filter(function(k){ return routeBoat(S.city, k); }).length > 0;
+  const stop = (S.city === 'jeju') ? '항구' : (boat ? '버스정류장과 항구' : '버스정류장');
+  place(S.city === 'jeju' ? 'port' : 'bus', stop, busSub, function(){ go('map'); }, false);
+}
+
+function drawMap(){
+  const box = $('map');
+  box.innerHTML = '';
+  $('map-hint').textContent = '바로 옆 도시로만 갈 수 있어요. 가 본 도시로 다시 가는 길은 반값입니다.';
+  const keys = cityOrder();
+  let prevMain = null, num = 0;
+  keys.forEach(function(key){
+    const c = CITIES[key];
+    const parent = c.branch || prevMain;
+    if(parent){
+      const ln = document.createElement('div');
+      ln.className = 'link' + (c.branch ? ' branch' : '');
+      ln.innerHTML = '<span class="bar"></span><span class="linkfare">' +
+        won(fareTo(parent, key)) + (routeBoat(parent, key) ? ' · 배나 비행기' : '') + '</span>';
+      box.appendChild(ln);
+    }
+    num++;
+    const here = S.city === key;
+    const fare = fareNow(S.city, key);
+    const n = document.createElement('div');
+    n.className = 'node' + (here ? ' here' : '') + (c.branch ? ' branch' : '');
+    n.innerHTML = '<span class="pin' + (here ? ' on' : '') + '">' + num + '</span>' +
+      '<span class="nm">' + c.name + '<span class="sub">' + c.sub + '</span></span>';
+    if(here){
+      const t = document.createElement('span');
+      t.className = 'tag';
+      t.textContent = '지금 여기';
+      n.appendChild(t);
+    }else if(fare > 0){
+      const b = document.createElement('button');
+      b.className = 'buy';
+      const how = routeBoat(S.city, key) ? '배 ' : '버스 ';
+      b.textContent = S.money >= fare ? (how + won(fare)) : '돈이 모자라요';
+      b.disabled = S.money < fare;
+      b.addEventListener('click', function(){ travel(key); });
+      n.appendChild(b);
+    }else{
+      const t = document.createElement('span');
+      t.className = 'far';
+      t.textContent = '옆 도시를 거쳐야 해요';
+      n.appendChild(t);
+    }
+    box.appendChild(n);
+    if(!c.branch) prevMain = key;
+  });
+  const note = document.createElement('p');
+  note.className = 'hint';
+  note.textContent = '전주는 경주에서 갈라지는 가지예요. 제주는 배나 비행기로만 갑니다.';
+  box.appendChild(note);
+}
+
+function sceneryHTML(kind){
+  const sea = kind === 'sea', lake = kind === 'lake', field = kind === 'field';
+  function panel(dx){
+    let g = '<g transform="translate(' + dx + ',0)">';
+    g += '<circle cx="320" cy="56" r="26" fill="#F8DE8E"/>';
+    if(field){
+      g += '<path d="M0 200 q70 -40 150 -6 q80 -34 150 2 q60 -26 100 6 V300 H0 Z" fill="#A9CF8E"/>';
+      g += '<path d="M0 236 h400 V300 H0 Z" fill="#CBD98A"/>';
+      g += '<path d="M20 170 q34 -16 68 0 l-6 8 q-28 -11 -56 0z" fill="#6B5A4A"/>';
+      g += '<rect x="30" y="178" width="48" height="26" fill="#EFE5D3"/><rect x="44" y="186" width="9" height="18" fill="#C08359"/>';
+      g += '<path d="M250 158 q40 -18 80 0 l-7 9 q-33 -13 -66 0z" fill="#6B5A4A"/>';
+      g += '<rect x="262" y="167" width="56" height="30" fill="#EFE5D3"/><rect x="278" y="177" width="10" height="20" fill="#C08359"/>';
+      g += '<path d="M130 212 q22 -34 44 0z" fill="#8FB58F"/><path d="M186 214 q16 -24 32 0z" fill="#9CC09A"/>';
+      g += '<path d="M40 262 h320 M20 280 h360" fill="none" stroke="#B7C97A" stroke-width="4"/>';
+      g += '</g>';
+      return g;
+    }
+    if(lake){
+      g += '<path d="M0 210 L80 110 L150 210 Z" fill="#8FA7A0"/>';
+      g += '<path d="M110 215 L210 92 L300 215 Z" fill="#7E968F"/>';
+      g += '<path d="M260 212 L340 128 L400 212 Z" fill="#8FA7A0"/>';
+      g += '<path d="M0 206 q60 -22 120 -4 q70 -20 140 0 q70 -16 140 4 V300 H0 Z" fill="#8FB58F"/>';
+      g += '<path d="M60 230 l14 -34 14 34z" fill="#5E8A68"/><path d="M212 236 l12 -30 12 30z" fill="#5E8A68"/>';
+      g += '<path d="M352 232 l13 -32 13 32z" fill="#5E8A68"/>';
+      g += '<rect x="0" y="246" width="400" height="54" fill="#7FB4C9"/>';
+      g += '<path d="M0 258 q28 -9 56 0 t56 0 t56 0 t56 0 t56 0 t56 0 t56 0" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.6"/>';
+      g += '</g>';
+      return g;
+    }
+    g += '<path d="M0 232 q60 -60 120 -10 q70 -58 140 -4 q70 -44 140 6 V300 H0 Z" fill="#9BCBA8"/>';
+    g += '<rect x="30" y="150" width="46" height="86" rx="6" fill="#E6D9C7"/>';
+    g += '<rect x="86" y="178" width="38" height="58" rx="6" fill="#D8C6B1"/>';
+    g += '<rect x="250" y="160" width="52" height="76" rx="6" fill="#E6D9C7"/>';
+    g += '<circle cx="180" cy="206" r="20" fill="#7FB58C"/><rect x="176" y="216" width="8" height="24" rx="2" fill="#9A7B5B"/>';
+    g += '<circle cx="344" cy="212" r="16" fill="#7FB58C"/><rect x="341" y="220" width="7" height="20" rx="2" fill="#9A7B5B"/>';
+    if(sea){
+      g += '<rect x="0" y="254" width="400" height="46" fill="#86BBD8"/>';
+      g += '<path d="M0 262 q25 -10 50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.7"/>';
+    }
+    g += '</g>';
+    return g;
+  }
+  return '<svg viewBox="0 0 800 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' +
+    '<rect x="0" y="0" width="800" height="300" fill="#C3E2F2"/>' + panel(0) + panel(400) + '</svg>';
+}
+
+function workSVG(key){
+  const s = '<svg viewBox="0 0 60 60" aria-hidden="true">';
+  const e = '</svg>';
+  if(key === 'galbi')   return s + '<path d="M12 22 q8 -10 20 -6 q14 -6 18 8 q4 14 -10 20 q-14 7 -24 -2 q-9 -8 -4 -20z" fill="#D98A5E"/><circle cx="24" cy="30" r="4" fill="#C2704A"/><circle cx="38" cy="36" r="3" fill="#C2704A"/>' + e;
+  if(key === 'cup')     return s + '<path d="M12 20 h32 v16 a16 16 0 0 1 -32 0z" fill="#F4F0E8"/><path d="M44 24 h5 a5 5 0 0 1 0 10 h-5" fill="none" stroke="#F4F0E8" stroke-width="4"/><ellipse cx="28" cy="48" rx="16" ry="4" fill="#DDD6C8"/>' + e;
+  if(key === 'orange') return s + '<circle cx="30" cy="33" r="20" fill="#F0923B"/><path d="M30 13 q-6 -5 -12 -4 q5 5 12 4z" fill="#5E8A68"/><circle cx="23" cy="27" r="3" fill="#F7B469" opacity="0.8"/>' + e;
+  if(key === 'basket') return '<svg viewBox="0 0 60 50" aria-hidden="true"><path d="M4 14 h52 l-6 32 h-40z" fill="#C89A63"/><path d="M4 14 h52 v6 h-52z" fill="#A97F4C"/><path d="M14 20 l4 26 M26 20 l2 26 M38 20 l-2 26 M48 20 l-4 26" stroke="#A97F4C" stroke-width="2"/></svg>';
+  return s + '<path d="M14 18 h26 v20 a10 10 0 0 1 -10 10 h-6 a10 10 0 0 1 -10 -10z" fill="#CFD8DE"/><path d="M40 22 l10 -6 -2 8 -8 4z" fill="#CFD8DE"/><path d="M14 22 h26" stroke="#A8B4BC" stroke-width="3"/>' + e;
+}
+
+function travel(to){
+  const fare = fareNow(S.city, to);
+  if(fare <= 0 || S.money < fare || S.city === to) return;
+  S.money -= fare;
+  const ride = $('ride');
+  $('scenery').innerHTML = sceneryArt(to);
+  $('rider').innerHTML = art(meLook(), 76, true);
+  $('ride-cap').textContent = CITIES[to].to + ' 가는 중';
+  ride.hidden = false;
+  let done = false;
+  function arrive(){
+    if(done) return;
+    done = true;
+    clearTimeout(timer);
+    ride.removeEventListener('click', arrive);
+    ride.hidden = true;
+    S.city = to;
+    const nm = CITIES[to].name;
+    let first = false;
+    if(S.stamps.indexOf(nm) < 0){ S.stamps.push(nm); first = true; }
+    save();
+    render();
+    go('street');
+    if(first){
+      go('hamster');
+      say(nm + ' 도장 받았다!', 'glad', 2400);
+    }
+  }
+  const timer = setTimeout(arrive, 3200);
+  ride.addEventListener('click', arrive);
+}
+
+function drawShop(){
+  const box = $('shop');
+  box.innerHTML = '';
+  const saleName = (GOODS.filter(function(g){ return g.id === S.sale; })[0] || {}).name || '';
+  $('sale-hint').textContent = saleName ? ('오늘은 ' + saleName + iga(saleName) + ' 30% 싸요.') : '';
+  GOODS.forEach(function(g){
+    const owned = g.once && S.owns[g.id];
+    const price = g.id === S.sale ? Math.round(g.price * 0.7 / 10) * 10 : g.price;
+    const row = document.createElement('div');
+    row.className = 'item';
+    const pic = document.createElement('div');
+    pic.innerHTML = art('goods/' + g.id, 34);
+    const nm = document.createElement('div');
+    nm.className = 'nm';
+    /* 깎인 값만 보여주면 깎였다는 걸 알 수 없습니다. 원래 값을 옆에 적어 둡니다 */
+    const sale = g.id === S.sale && !owned;
+    nm.innerHTML = '<b>' + g.name + (sale ? ' <span class="tag">할인</span>' : '') + '</b><span>' +
+      g.desc + (sale ? ' · 원래 ' + won(g.price) : '') + '</span>';
+    const btn = document.createElement('button');
+    btn.className = 'buy';
+    if(owned){ btn.textContent = '가지고 있음'; btn.disabled = true; }
+    else{
+      btn.textContent = won(price);
+      btn.disabled = S.money < price;
+      btn.addEventListener('click', function(){
+        if(S.money < price) return;
+        S.money -= price;
+        if(g.once) S.owns[g.id] = true;
+        else S.inv[g.id] = (S.inv[g.id] || 0) + g.add;
+        noteBuy('goods', g.id, price);
+        after();
+      });
+    }
+    row.appendChild(pic); row.appendChild(nm); row.appendChild(btn);
+    box.appendChild(row);
+  });
+}
+
+function drawBag(){
+  const box = $('bag');
+  box.innerHTML = '';
+  function line(label, value){
+    const d = document.createElement('div');
+    d.className = 'stat';
+    d.innerHTML = '<span>' + label + '</span><b>' + value + '</b>';
+    box.appendChild(d);
+  }
+  line('돈', won(S.money));
+  line('햄찌 밥', S.inv.food + '개');
+  line('깨끗한 물', S.inv.water + '개');
+  line('톱밥', S.inv.bed + '개');
+  line('해바라기씨', S.inv.treat + '개');
+  line('쳇바퀴', S.owns.wheel ? '있음' : '없음');
+  line('터널', S.owns.tunnel ? '있음' : '없음');
+  $('stamps').innerHTML = S.stamps.map(function(n){
+    const key = Object.keys(CITIES).filter(function(k){ return CITIES[k].name === n; })[0];
+    return key ? art('stamp/' + key, 62) : '';
+  }).join('');
+}
+
+/* ---------- 하루 한 번 ----------
+   잠자기는 기기 날짜가 바뀌어야 다시 할 수 있습니다.
+   "몇 시간 뒤에 오세요" 같은 재촉은 두지 않습니다. 돌보기와 꾸미기는 언제든 열려 있고,
+   돈이 걸린 일하기와 잠자기만 하루에 한 번으로 묶습니다. */
+/* 그 지역 기준의 날짜 번호. 뺄셈으로 며칠이 지났는지 셀 수 있습니다. */
+function dayNum(){
+  const d = new Date();
+  return Math.floor((d.getTime() - d.getTimezoneOffset() * 60000) / 86400000);
+}
+function canAct(){ return S.lastSleep !== dayNum(); }
+
+/* 하루치 상태는 현실 날짜가 바뀌면 되돌아옵니다.
+   충전을 잠자기가 아니라 날짜가 맡으므로, 자지 않고 그냥 꺼도 다음 날을 잃지 않습니다.
+
+   햄찌가 배고파지는 것도 여기서 합니다. 하루가 지나면 밥과 물은 배고픈 표정이 뜰 만큼
+   줄고, 톱밥은 이틀에 한 번 갈 만큼만 줄어듭니다. 아무리 오래 비워도 사흘치까지만 세고
+   바닥값이 있어서, 한 달 만에 와도 이틀 만에 온 것과 같습니다. 밥 한 번이면 바로 회복해요.
+   절대 죽지 않는다는 규칙을 숫자로 옮긴 것입니다. */
+const GAP_MAX = 3;
+function rollover(){
+  const n = dayNum();
+  if(S.dayStamp === n) return 0;
+  const had = (typeof S.dayStamp === 'number');
+  const gap = had ? Math.max(0, Math.min(GAP_MAX, n - S.dayStamp)) : 0;
+  /* "며칠째"는 들어온 날을 셉니다. 전에는 잠자기만 올려서, 자는 버튼을 안 누르는
+     아이는 한 달을 놀아도 1일째였습니다. 며칠을 건너뛰어도 한 칸만 올립니다 —
+     월요일에 놀고 금요일에 와서 "5일째"라고 하면 빠뜨린 날처럼 보입니다. */
+  if(had) S.day++;
+  S.dayStamp = n;
+  S.works = 3;
+  S.today = { fed:false, shopped:false, played:false };
+  /* 이미 가진 '한 번만 사는' 물건은 빼고 고릅니다. 걸리면 "오늘은 쳇바퀴가 30% 싸요"
+     옆에서 버튼이 "가지고 있음"이라, 살 수 없는 걸 할인한다고 알리게 됩니다. */
+  const onSale = GOODS.filter(function(g){ return !(g.once && S.owns[g.id]); });
+  const pool = onSale.length ? onSale : GOODS;
+  S.sale = pool[Math.floor(Math.random() * pool.length)].id;
+  for(let i = 0; i < gap; i++){
+    S.hunger = Math.max(10, S.hunger - 75);
+    S.thirst = Math.max(10, S.thirst - 75);
+    S.bed    = Math.max(10, S.bed - 45);
+    S.mood   = Math.max(20, S.mood - 20);
+  }
+  return gap;
+}
+
+const TODO = [
+  { id:'fed',     name:'밥 주기' },
+  { id:'work',    name:'일하기' },
+  { id:'shopped', name:'상점 가기' },
+  { id:'played',  name:'놀기' }
+];
+function todoDone(id){
+  if(id === 'work') return S.works <= 0;
+  return !!S.today[id];
+}
+function allDone(){
+  return TODO.filter(function(t){ return !todoDone(t.id); }).length === 0;
+}
+let sleepArmed = false;
+function drawTodo(){
+  const box = $('todo');
+  box.innerHTML = '';
+  TODO.forEach(function(t){
+    const row = document.createElement('div');
+    const done = todoDone(t.id);
+    row.className = 'todo-row' + (done ? ' done' : '');
+    const inside = done ? '✓' : (t.id === 'work' ? S.works : '');
+    row.innerHTML = '<span class="check">' + inside + '</span>' +
+                    '<span class="tname">' + t.name + '</span>';
+    box.appendChild(row);
+  });
+
+  const wrap = $('sleep-wrap');
+  wrap.innerHTML = '';
+  if(!canAct()){
+    const p = document.createElement('p');
+    p.className = 'hint done-line';
+    p.textContent = '오늘은 다 했어요. 내일 또 만나요.';
+    wrap.appendChild(p);
+    const p2 = document.createElement('p');
+    p2.className = 'hint';
+    p2.style.width = '100%';
+    p2.style.textAlign = 'center';
+    p2.textContent = '집 꾸미기와 햄찌랑 놀기는 더 할 수 있어요.';
+    wrap.appendChild(p2);
+    return;
+  }
+  /* 자는 순간 현실 날짜가 바뀔 때까지 일하기가 잠깁니다. 켜자마자 눌러서 하루를
+     통째로 잃는 일이 없도록, 할 일이 남았으면 한 번 더 누르게 합니다.
+     확인창(confirm) 대신 버튼 자체를 바꾸는 쪽을 골랐습니다. */
+  const left = TODO.filter(function(t){ return !todoDone(t.id); }).map(function(t){ return t.name; });
+  const b = document.createElement('button');
+  b.className = 'btn sleep wide' + (allDone() ? ' big' : '') + (nextTask() === 'sleep' ? ' pulse' : '');
+  b.textContent = allDone() ? '다 했어요! 불 끄고 자기'
+                : (sleepArmed ? '정말 잘까요? 한 번 더 누르기' : '불 끄고 자기');
+  b.addEventListener('click', function(){
+    if(!allDone() && !sleepArmed){ sleepArmed = true; drawTodo(); return; }
+    goSleep();
+  });
+  wrap.appendChild(b);
+  if(sleepArmed && !allDone()){
+    const warn = document.createElement('p');
+    warn.className = 'hint';
+    warn.style.width = '100%';
+    warn.style.textAlign = 'center';
+    warn.textContent = '아직 ' + left.join(', ') + ' 남았어요. 자고 나면 내일까지 못 해요.';
+    wrap.appendChild(warn);
+  }
+}
+
+function goSleep(){
+  if(!canAct()) return;
+  face = 'sleep';
+  $('say').textContent = T.sleeping;
+  drawHamster();
+  setTimeout(function(){
+    /* 날짜를 올리는 것은 rollover 가 맡습니다. 여기서도 올리면 두 번 세집니다 */
+    S.lastSleep = dayNum();
+    face = 'idle';
+    save();
+    render();
+    showNight();
+  }, 1400);
+}
+function showNight(){
+  $('night-ham').innerHTML = art('hamster/sleep', 150);
+  $('night-day').textContent = S.day + '일째 끝';
+  $('night').hidden = false;
+}
+$('night-close').addEventListener('click', function(){
+  $('night').hidden = true;
+  go('hamster');
+});
+
+/* ---------- 다음에 할 곳 ----------
+   기획서의 "반짝이는 곳을 탭하면 진행된다"를 지금 구조에 맞춘 것입니다.
+   정해진 순서를 강요하지 않고, 오늘 할 일 중 아직 안 끝난 첫 번째 자리만 반짝입니다. */
+function nextTask(){
+  if(!canAct()) return null;
+  if(!S.today.fed) return 'fed';
+  if(S.works > 0) return 'work';
+  if(!S.today.shopped) return 'shopped';
+  if(!S.today.played) return 'played';
+  return 'sleep';
+}
+function taskTab(t){
+  if(t === 'work' || t === 'shopped') return 'street';
+  if(t === 'fed' || t === 'played' || t === 'sleep') return 'hamster';
+  return null;
+}
+
+const TAB_LABEL = { map:'지도', street:'거리', home:'집', hamster:'햄찌', bag:'가방' };
+/* 상점은 아래 메뉴에 칸이 없습니다. 거리에서 들어가는 곳이니 거리를 "지금 여기"로 둡니다.
+   전에는 상점에 있는 동안 다섯 칸이 전부 꺼지고, 대신 햄찌가 빨갛게 깜빡여서
+   아이가 어디에 있는지도, 어디로 가야 하는지도 알 수 없었습니다. */
+function tabFor(name){ return name === 'shop' ? 'street' : name; }
+function tabIcon(k){
+  const s = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">';
+  const e = '</svg>';
+  if(k === 'map')     return s + '<path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 12 7 12s7-6.8 7-12a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.6" fill="var(--surface)"/>' + e;
+  if(k === 'street')  return s + '<rect x="2.5" y="9" width="7" height="12" rx="1.5"/><rect x="11.5" y="3.5" width="9" height="17.5" rx="1.5"/><rect x="14" y="6.5" width="2" height="2" fill="var(--surface)"/><rect x="17" y="6.5" width="2" height="2" fill="var(--surface)"/>' + e;
+  if(k === 'home')    return s + '<path d="M12 3l9.5 8.4-1.3 1.5-1.2-1V21H7V11.9l-1.2 1L2.5 11.4z"/><rect x="10.3" y="15" width="3.4" height="6" rx="1" fill="var(--surface)"/>' + e;
+  if(k === 'hamster') return s + '<circle cx="6.8" cy="7.5" r="3.2"/><circle cx="17.2" cy="7.5" r="3.2"/><circle cx="12" cy="14" r="8"/><circle cx="9.3" cy="13" r="1.4" fill="var(--surface)"/><circle cx="14.7" cy="13" r="1.4" fill="var(--surface)"/>' + e;
+  return s + '<path d="M4.5 7.5h15L20.5 21h-17z"/><path d="M9 7.5V6a3 3 0 0 1 6 0v1.5" fill="none" stroke="currentColor" stroke-width="2"/>' + e;
+}
+function drawTabs(){
+  const need = taskTab(nextTask());
+  const here = tabFor(S.tab);
+  document.querySelectorAll('.tab').forEach(function(t){
+    const k = t.dataset.go;
+    t.innerHTML = '<span class="ic">' + tabIcon(k) + '</span><span>' + TAB_LABEL[k] + '</span>';
+    if(k === need && here !== k) t.classList.add('need');
+    else t.classList.remove('need');
+  });
+}
+
+/* ---------- 축하 ---------- */
+function showYay(title, sub, artId, px){
+  $('yay-art').innerHTML = artId ? art(artId, px || 110) : '';
+  $('yay-t').textContent = title;
+  $('yay-s').textContent = sub || '';
+  $('yay').hidden = false;
+}
+$('yay-close').addEventListener('click', function(){ $('yay').hidden = true; });
+
+/* ---------- 되돌리기 ----------
+   확인창을 쓰지 않는 대신 방금 산 것을 물릴 수 있게 합니다. */
+let lastBuy = null;
+function noteBuy(kind, id, price){ lastBuy = { kind:kind, id:id, price:price }; }
+function buyName(b){
+  if(b.kind === 'goods') return (GOODS.filter(function(g){ return g.id === b.id; })[0] || {}).name || '';
+  if(b.kind === 'look')  return (lookById(b.id) || {}).name || '';
+  if(b.kind === 'home')  return ((CITIES[b.id] || {}).name || '') + ' 집';
+  return (FURN.filter(function(f){ return f.id === b.id; })[0] || {}).name || '';
+}
+/* 집은 가구를 놓는 순간 물릴 수 없습니다. 놓인 가구가 갈 데가 없어지기 때문입니다. */
+function homeUndoable(cityKey){
+  const h = S.homes[cityKey];
+  return !!h && h.owned && Object.keys(h.cells || {}).length === 0;
+}
+function undoBuy(){
+  if(!lastBuy) return;
+  const b = lastBuy;
+  if(b.kind === 'goods'){
+    const g = GOODS.filter(function(x){ return x.id === b.id; })[0];
+    if(!g) return;
+    if(g.once) S.owns[g.id] = false;
+    else S.inv[g.id] = Math.max(0, (S.inv[g.id] || 0) - g.add);
+  }else if(b.kind === 'look'){
+    S.me.owned = S.me.owned.filter(function(x){ return x !== b.id; });
+    if(S.me.look === b.id) S.me.look = S.me.owned[0] || '1';
+  }else if(b.kind === 'home'){
+    if(!homeUndoable(b.id)) return;
+    S.homes[b.id].owned = false;
+  }else{
+    if(freeCount(b.id) <= 0) return;
+    S.furn[b.id] = Math.max(0, (S.furn[b.id] || 0) - 1);
+  }
+  S.money += b.price;
+  lastBuy = null;
+  save();
+  render();
+}
+/* 상점과 내 집 두 곳에 자리가 있습니다. 집은 집 화면에서 사니까요. */
+function drawUndo(){
+  const boxes = [$('undo-bar'), $('undo-bar-home')];
+  boxes.forEach(function(x){ if(x) x.innerHTML = ''; });
+  if(!lastBuy) return;
+  if(lastBuy.kind === 'furn' && freeCount(lastBuy.id) <= 0){ lastBuy = null; return; }
+  if(lastBuy.kind === 'home' && !homeUndoable(lastBuy.id)){ lastBuy = null; return; }
+  boxes.forEach(function(box){
+    if(!box) return;
+    const bar = document.createElement('div');
+    bar.className = 'undo';
+    const t = document.createElement('span');
+    t.textContent = '방금 산 것 · ' + buyName(lastBuy);
+    bar.appendChild(t);
+    const b = document.createElement('button');
+    b.className = 'buy';
+    b.textContent = '되돌리기';
+    b.addEventListener('click', undoBuy);
+    bar.appendChild(b);
+    box.appendChild(bar);
+  });
+}
+
+/* ---------- 나와 옷장 ---------- */
+function drawMe(){
+  if(!S.me || !S.me.name) return;
+  const L = lookById(S.me.look);
+  $('me-room').innerHTML = art(meLook(), 92);
+  const card = $('me-card');
+  card.innerHTML = art(meLook(), 52) +
+    '<span class="who"><b>' + esc(S.me.name) + '</b><span>' + (L ? L.name : '') + '</span></span>';
+  const b = document.createElement('button');
+  b.className = 'buy';
+  b.textContent = '옷장';
+  b.addEventListener('click', function(){ go('bag'); });
+  card.appendChild(b);
+}
+
+function drawWardrobe(){
+  const box = $('wardrobe');
+  box.innerHTML = '';
+  LOOKS.forEach(function(L){
+    const owned = S.me.owned.indexOf(L.id) >= 0;
+    const on = S.me.look === L.id;
+    const b = document.createElement('button');
+    b.className = 'wear' + (on ? ' on' : '') + (owned ? '' : ' off');
+    let note;
+    if(on) note = '입는 중';
+    else if(owned) note = '누르면 입기';
+    else note = CITIES[L.city].name + ' 상점 ' + won(L.price);
+    b.innerHTML = art(lookId(L.id), 60) + '<b>' + L.name + '</b><span class="where">' + note + '</span>';
+    if(owned && !on) b.addEventListener('click', function(){ wearLook(L.id); });
+    if(!owned) b.disabled = true;
+    box.appendChild(b);
+  });
+}
+function drawSexPick(){
+  const box = $('sex-pick');
+  if(!box || !S.me) return;
+  box.innerHTML = '';
+  SEXES.forEach(function(x){
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-pressed', S.me.sex === x.id ? 'true' : 'false');
+    b.textContent = x.name;
+    b.addEventListener('click', function(){
+      if(S.me.sex === x.id) return;
+      S.me.sex = x.id;
+      save();
+      render();
+    });
+    box.appendChild(b);
+  });
+}
+function wearLook(id){
+  S.me.look = id;
+  save();
+  render();
+}
+
+function drawShopLooks(){
+  const box = $('shop-looks');
+  box.innerHTML = '';
+  const list = LOOKS.filter(function(L){
+    return L.city === S.city && S.me.owned.indexOf(L.id) < 0;
+  });
+  if(!list.length){
+    box.innerHTML = '<p class="hint">여기 옷은 다 샀어요. 다른 도시에 가면 또 있어요.</p>';
+    return;
+  }
+  list.forEach(function(L){
+    const row = document.createElement('div');
+    row.className = 'item';
+    const pic = document.createElement('div');
+    pic.innerHTML = art(lookId(L.id), 38);
+    const nm = document.createElement('div');
+    nm.className = 'nm';
+    nm.innerHTML = '<b>' + L.name + '</b><span>' + CITIES[S.city].name + '에서만 팔아요</span>';
+    const btn = document.createElement('button');
+    btn.className = 'buy';
+    btn.textContent = won(L.price);
+    btn.disabled = S.money < L.price;
+    btn.addEventListener('click', function(){
+      if(S.money < L.price || S.me.owned.indexOf(L.id) >= 0) return;
+      S.money -= L.price;
+      S.me.owned.push(L.id);
+      S.me.look = L.id;
+      noteBuy('look', L.id, L.price);
+      save();
+      render();
+    });
+    row.appendChild(pic); row.appendChild(nm); row.appendChild(btn);
+    box.appendChild(row);
+  });
+}
+
+/* ---------- 내 집 ---------- */
+let picked = null;
+
+/* 문패 입력칸은 다시 그리지 않습니다. 글자를 치는 중에 커서가 날아가지 않도록
+   화면에 고정해 두고 값만 맞춰 넣습니다. */
+$('home-sign').addEventListener('input', function(){
+  const h = home();
+  if(!h) return;
+  h.sign = $('home-sign').value;
+  save();
+  drawPlaces();
+});
+
+let shopTab = 'goods';
+const SHOP_TABS = [
+  { id:'goods', name:'햄찌' },
+  { id:'looks', name:'옷' },
+  { id:'furn',  name:'가구' }
+];
+function drawShopTabs(){
+  const box = $('shop-segs');
+  box.innerHTML = '';
+  SHOP_TABS.forEach(function(t){
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-pressed', shopTab === t.id ? 'true' : 'false');
+    b.textContent = t.name;
+    b.addEventListener('click', function(){ shopTab = t.id; drawShopTabs(); });
+    box.appendChild(b);
+  });
+  $('shop').hidden = shopTab !== 'goods';
+  $('shop-looks').hidden = shopTab !== 'looks';
+  $('shop-furn').hidden = shopTab !== 'furn';
+  $('sale-hint').hidden = shopTab !== 'goods';
+}
+
+function drawShopFurn(){
+  const box = $('shop-furn');
+  box.innerHTML = '';
+  FURN.filter(function(f){ return !f.city || f.city === S.city; }).forEach(function(f){
+    const row = document.createElement('div');
+    row.className = 'item';
+    const pic = document.createElement('div');
+    pic.innerHTML = art('furniture/' + f.id, 34);
+    const nm = document.createElement('div');
+    nm.className = 'nm';
+    const have = S.furn[f.id] || 0;
+    nm.innerHTML = '<b>' + f.name + (f.city ? ' <span class="tag">여기만</span>' : '') + '</b>' +
+      '<span>' + (have ? ('가진 것 ' + have + '개') : '아직 없어요') + '</span>';
+    const btn = document.createElement('button');
+    btn.className = 'buy';
+    btn.textContent = won(f.price);
+    btn.disabled = S.money < f.price;
+    btn.addEventListener('click', function(){
+      if(S.money < f.price) return;
+      S.money -= f.price;
+      S.furn[f.id] = (S.furn[f.id] || 0) + 1;
+      noteBuy('furn', f.id, f.price);
+      save();
+      render();
+    });
+    row.appendChild(pic); row.appendChild(nm); row.appendChild(btn);
+    box.appendChild(row);
+  });
+}
+
+function drawHome(){
+  const body = $('home-body');
+  const h = home();
+  if(picked && freeCount(picked) <= 0) picked = null;
+
+  const sw = $('home-sign-wrap');
+  sw.hidden = !h.owned;
+  if(h.owned && document.activeElement !== $('home-sign')){
+    $('home-sign').value = h.sign || '';
+  }
+  $('home-name').textContent = CITIES[S.city].name + ' 내 집';
+  body.innerHTML = '';
+
+  if(!h.owned){
+    const card = document.createElement('div');
+    card.className = 'card';
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = CITIES[S.city].name + '에도 집을 살 수 있어요. 사면 가구를 놓고 꾸밀 수 있습니다.';
+    card.appendChild(p);
+    const b = document.createElement('button');
+    b.className = 'btn go wide';
+    b.textContent = S.money >= HOME_PRICE ? (won(HOME_PRICE) + '에 사기') : ('돈이 모자라요 · ' + won(HOME_PRICE));
+    b.disabled = S.money < HOME_PRICE;
+    b.addEventListener('click', function(){
+      if(S.money < HOME_PRICE) return;
+      S.money -= HOME_PRICE;
+      h.owned = true;
+      noteBuy('home', S.city, HOME_PRICE);
+      save();
+      render();
+      showYay(CITIES[S.city].name + ' 집이 생겼어요!', '가구를 놓아 보세요', 'place/home', 120);
+    });
+    card.appendChild(b);
+    body.appendChild(card);
+    return;
+  }
+
+  const box = document.createElement('div');
+  box.className = 'room-box';
+  box.style.background = WALLS[h.wall] || WALLS[0];
+  const band = document.createElement('div');
+  band.className = 'room-floorband';
+  band.style.background = FLOORS[h.floor] || FLOORS[0];
+  box.appendChild(band);
+  const grid = document.createElement('div');
+  grid.className = 'room-grid';
+  grid.setAttribute('role', 'group');
+  grid.setAttribute('aria-label', '방 격자 ' + CELLS + '칸');
+  for(let i = 0; i < CELLS; i++){
+    const key = String(i);
+    const id = h.cells[key];
+    const cell = document.createElement('button');
+    cell.type = 'button';
+    cell.className = 'cellbox' + (!id && picked ? ' open' : '');
+    if(id){
+      cell.innerHTML = art('furniture/' + id, 42);
+      cell.setAttribute('aria-label', furnName(id) + ', 누르면 가져옵니다');
+    }else{
+      cell.setAttribute('aria-label', picked
+        ? ('빈 칸 ' + (i + 1) + ', ' + furnName(picked) + ' 놓기')
+        : ('빈 칸 ' + (i + 1)));
+    }
+    cell.addEventListener('click', function(){
+      if(h.cells[key]){
+        delete h.cells[key];
+      }else if(picked && freeCount(picked) > 0){
+        h.cells[key] = picked;
+        if(freeCount(picked) <= 0) picked = null;
+      }else{
+        return;
+      }
+      save();
+      drawHome();
+    });
+    grid.appendChild(cell);
+  }
+  box.appendChild(grid);
+  body.appendChild(box);
+
+  const colors = document.createElement('div');
+  colors.className = 'card';
+  function swatchRow(label, list, now, set){
+    const l = document.createElement('p');
+    l.className = 'lab';
+    l.textContent = label;
+    colors.appendChild(l);
+    const row = document.createElement('div');
+    row.className = 'swatches';
+    list.forEach(function(c, i){
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sw';
+      b.style.background = c;
+      b.setAttribute('aria-pressed', now === i ? 'true' : 'false');
+      b.setAttribute('aria-label', label + ' ' + (i + 1));
+      b.addEventListener('click', function(){ set(i); save(); drawHome(); });
+      row.appendChild(b);
+    });
+    colors.appendChild(row);
+  }
+  swatchRow('벽지', WALLS, h.wall, function(i){ h.wall = i; });
+  swatchRow('바닥', FLOORS, h.floor, function(i){ h.floor = i; });
+  body.appendChild(colors);
+
+  const trayWrap = document.createElement('div');
+  const have = FURN.filter(function(f){ return (S.furn[f.id] || 0) > 0; });
+  const lab = document.createElement('p');
+  lab.className = 'lab';
+  if(!have.length) lab.textContent = '가구';
+  else lab.textContent = picked ? '빈 칸을 누르면 놓여요. 놓인 가구를 누르면 도로 가져옵니다.' : '놓을 가구를 고르세요';
+  trayWrap.appendChild(lab);
+  if(!have.length){
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = '아직 가구가 없어요. 상점에서 살 수 있습니다.';
+    trayWrap.appendChild(p);
+  }else{
+    const tray = document.createElement('div');
+    tray.className = 'tray';
+    have.forEach(function(f){
+      const n = freeCount(f.id);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('aria-pressed', picked === f.id ? 'true' : 'false');
+      b.disabled = n <= 0;
+      b.innerHTML = art('furniture/' + f.id, 36) + '<span>' + f.name + ' ' + n + '</span>';
+      b.addEventListener('click', function(){
+        picked = (picked === f.id) ? null : f.id;
+        drawHome();
+      });
+      tray.appendChild(b);
+    });
+    trayWrap.appendChild(tray);
+  }
+  body.appendChild(trayWrap);
+}
+
+function showIntro(){
+  let pick = '1', sex = 'b';
+  /* 성별을 바꾸면 아래 옷 그림도 같이 바뀌어야 해서, 둘을 한 번에 다시 그립니다 */
+  function drawPick(){
+    const seg = $('intro-sex');
+    seg.innerHTML = '';
+    SEXES.forEach(function(x){
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('aria-pressed', sex === x.id ? 'true' : 'false');
+      b.textContent = x.name;
+      b.addEventListener('click', function(){ sex = x.id; drawPick(); });
+      seg.appendChild(b);
+    });
+    const box = $('intro-looks');
+    box.innerHTML = '';
+    ['1','2'].forEach(function(id){
+      const L = lookById(id);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('aria-pressed', id === pick ? 'true' : 'false');
+      b.innerHTML = art(lookId(id, sex), 86) + '<span>' + L.name + '</span>';
+      b.addEventListener('click', function(){ pick = id; drawPick(); });
+      box.appendChild(b);
+    });
+  }
+  drawPick();
+  $('intro').hidden = false;
+  $('intro-go').onclick = function(){
+    const typed = ($('me-name').value || '').trim();
+    S.me = { name: typed || '나', sex: sex, look: pick, owned: [pick] };
+    $('intro').hidden = true;
+    save();
+    render();
+    go('hamster');
+    say('멋지다!', 'glad', 2200);
+  };
+}
+
+/* 화면 전체를 다시 그립니다.
+   keepSay 면 말풍선만 그대로 둡니다 — 밥을 준 직후 '냠냠냠' 을 기분말로 덮어쓰지
+   않으려는 것입니다. 전에는 이것 하나 때문에 render 와 after 가 열일곱 줄씩 따로
+   있었고, 새 그리기 함수를 한쪽에만 넣으면 조용히 안 그려졌습니다. */
+function render(keepSay){
+  drawStatus();
+  drawHamster();
+  drawMe();
+  drawCare();
+  drawPlaces();
+  drawMap();
+  drawShop();
+  drawShopLooks();
+  drawShopFurn();
+  drawShopTabs();
+  drawSexPick();
+  drawWardrobe();
+  drawHome();
+  drawBag();
+  drawTodo();
+  drawUndo();
+  drawTabs();
+  if(!keepSay) $('say').textContent = moodWord();
+}
+/* 돌보기 버튼을 누른 뒤. say() 가 이미 말풍선과 표정을 바꿔 놓았으니 지킵니다 */
+function after(){ save(); render(true); }
+
+/* ---------- 화면 전환 ---------- */
+function go(name){
+  S.tab = name;
+  ['map','hamster','street','home','bag','shop'].forEach(function(n){
+    $('s-' + n).hidden = (n !== name);
+  });
+  document.querySelectorAll('.tab').forEach(function(t){
+    if(t.dataset.go === tabFor(name)) t.setAttribute('aria-current', 'page');
+    else t.removeAttribute('aria-current');
+  });
+  if(sleepArmed){ sleepArmed = false; drawTodo(); }   // 다른 화면에 다녀오면 확인이 풀립니다
+  /* "상점"은 사야 체크되는 게 아니라 들르면 체크됩니다.
+     사야 끝나는 구조면 돈이 없는 날엔 영영 안 끝나고, 집 살 돈을 모으는 날에도
+     뭔가 사라고 떠밀게 됩니다. */
+  if(name === 'shop' && !S.today.shopped){ S.today.shopped = true; drawTodo(); }
+  if(name === 'hamster'){ $('say').textContent = moodWord(); drawHamster(); }
+  if(name !== 'shop' && name !== 'home'){ lastBuy = null; drawUndo(); }
+  /* 거리도 같이 다시 그립니다. 안 그리면 상점에 들렀다 아무것도 안 사고 나왔을 때
+     shopped 는 켜졌는데 거리의 상점 타일은 계속 반짝여서, 아래 메뉴와 거리가
+     서로 다른 곳을 가리킵니다. 타일 대여섯 개라 매번 그려도 쌉니다. */
+  drawPlaces();
+  drawTabs();
+  document.querySelector('.stage').scrollTop = 0;
+  save();
+}
+document.querySelectorAll('.tab').forEach(function(t){
+  t.addEventListener('click', function(){ go(t.dataset.go); });
+});
+$('shop-back').addEventListener('click', function(){ go('street'); });
+
+/* ---------- 편의점 미니게임 ---------- */
+/* 손님은 AI 그림이 아니라 코드입니다. 화면에 56px 폭으로 뜨는 그림이라
+   남는 것이 머리 모양과 옷 색 둘뿐이고, 표정이 바뀌어야 쓸모가 있는데
+   PNG 넷에 표정을 덮으면 맞출 좌표가 넷으로 늘어납니다. 룩 그림을 머리색만
+   갈아 다시 씁니다 — 넷이 머리와 상의 색으로 갈립니다. */
+const CUSTOMERS = [
+  { look:'b/14', hair:'#9C9A95' },   // 흰머리·붉은 상의
+  { look:'g/17', hair:'#3E2C22' },   // 긴머리·노란 옷
+  { look:'b/4',  hair:'#2E2A26' },   // 짧은머리·남색
+  { look:'b/3',  hair:'#4A3426' }    // 짧은머리·민트
+];
+function custArt(n, mood){
+  const c = CUSTOMERS[n % CUSTOMERS.length];
+  /* 4/5 는 상반신만 보이는 비율입니다. 다 보이게 하면 112px 이라 일하는 화면이 스크롤됩니다. */
+  return '<span class="art half" style="width:56px; aspect-ratio:4 / 5">' +
+    charSVG(c.look, c.hair, mood) + '</span>';
+}
+function custMood(){
+  // 주문을 다 채우고 다음 손님을 기다리는 구간. order 가 비어 있을 때 참이 되면 안 됩니다
+  if(W.order.length && W.step >= W.order.length) return 'glad';
+  return W.sad ? 'sad' : 'idle';
+}
+let W = null;
+function startWork(kind){
+  /* mistakes 는 이 손님 것, missTotal 은 일하는 내내입니다.
+     삯은 손님마다 따로 매기고, 팁은 세 손님을 다 무사히 넘겼을 때만 줍니다. */
+  W = { v: WORK_A[kind] || WORK_A.store,
+        idx:0, order:[], step:0, mistakes:0, missTotal:0, earned:0, showing:true,
+        sad:false, cust:Math.floor(Math.random() * CUSTOMERS.length) };
+  $('work').hidden = false;
+  nextCustomer();
+}
+function endWork(){
+  $('work').hidden = true;
+  W = null;
+  if(A){ cancelAnimationFrame(A.raf); A = null; }
+  if(G){ cancelAnimationFrame(G.raf); G = null; }
+  if(L){ cancelAnimationFrame(L.raf); L = null; }
+  if(B){ B = null; }
+  if(Y){ cancelAnimationFrame(Y.raf); Y = null; }
+  render();
+  go('street');
+}
+function nextCustomer(){
+  if(W.idx >= 3){ finishWork(); return; }
+  const len = W.v.len(W.idx);
+  const pool = W.v.items;
+  W.order = [];
+  for(let i = 0; i < len; i++){
+    W.order.push(pool[Math.floor(Math.random() * pool.length)].id);
+  }
+  W.step = 0;
+  W.mistakes = 0;   // 안 되돌리면 손님 1 에서 한 번 틀린 값이 손님 2·3 삯까지 깎습니다
+  W.sad = false;
+  W.showing = true;
+  drawWork();
+  setTimeout(function(){
+    if(!W) return;
+    W.showing = false;
+    drawWork();
+  }, W.v.showMs(len));
+}
+function drawWork(){
+  if(!W) return;
+  $('w-me').innerHTML = art(meLook(), 40, true);
+  $('w-step').textContent = '손님 ' + Math.min(W.idx + 1, 3) + ' / 3';
+  $('w-earned').textContent = won(W.earned);
+  const body = $('w-body');
+  body.innerHTML = '';
+
+  const order = document.createElement('div');
+  order.className = 'order';
+  const title = document.createElement('div');
+  title.style.fontFamily = 'var(--font-display)';
+  title.style.fontSize = '19px';
+  title.textContent = W.showing ? W.v.ask : W.v.wait;
+  const head = document.createElement('div');
+  head.className = 'cust';
+  head.innerHTML = custArt(W.cust + W.idx, custMood());
+  head.appendChild(title);
+  const slots = document.createElement('div');
+  slots.className = 'slots';
+  W.order.forEach(function(id, i){
+    const sl = document.createElement('div');
+    if(W.showing){
+      sl.className = 'slot';
+      sl.innerHTML = art('item/' + id, 44);
+    }else if(i < W.step){
+      sl.className = 'slot done';
+      sl.innerHTML = art('item/' + id, 44);
+    }else{
+      sl.className = 'slot q';
+      sl.textContent = '?';
+    }
+    slots.appendChild(sl);
+  });
+  order.appendChild(head);
+  order.appendChild(slots);
+  body.appendChild(order);
+
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  W.v.items.forEach(function(it){
+    const b = document.createElement('button');
+    b.className = 'pick';
+    b.innerHTML = art('item/' + it.id, 44) + '<span>' + it.name + '</span>';
+    b.disabled = W.showing;
+    b.addEventListener('click', function(){ pick(it.id, b); });
+    grid.appendChild(b);
+  });
+  body.appendChild(grid);
+
+  const quit = document.createElement('div');
+  quit.className = 'row';
+  quit.innerHTML = '<button class="btn wide quit" id="w-quit">그만하기</button>';
+  body.appendChild(quit);
+  /* 그만하기는 번 돈이 있을 때만 일 횟수를 씁니다 (미니게임 여섯 곳 다 같습니다).
+     한 푼도 못 벌고 나오면 그냥 다시 들어올 수 있다는 뜻이고, 일부러 그렇게 둡니다 —
+     주문이 어려워 보여 겁먹고 나온 2학년한테서 하루 세 번 중 하나를 뺏지 않으려는 것입니다. */
+  $('w-quit').addEventListener('click', function(){
+    if(W.earned > 0){ S.money += W.earned; S.works--; save(); }
+    endWork();
+  });
+}
+function pick(id, btn){
+  /* W.step >= 길이 는 주문을 다 채우고 다음 손님을 기다리는 gap 구간입니다.
+     그때 W.order[W.step] 이 undefined 라, 막아두지 않으면 뭘 눌러도 오답으로 셉니다. */
+  if(!W || W.showing || W.step >= W.order.length) return;
+  if(id === W.order[W.step]){
+    W.step++;
+    if(W.step >= W.order.length){
+      const pay = Math.max(50, Math.round((40 + 33 * W.order.length - 25 * W.mistakes) / 10) * 10);
+      W.earned += pay;
+      drawWork();
+      /* idx 는 gap 뒤에 올립니다. 먼저 올리면 "손님 2 / 3" 과 웃는 얼굴이 같이 떠서,
+         아직 주문도 안 한 다음 손님이 웃고 있는 것처럼 보입니다. */
+      setTimeout(function(){ if(!W) return; W.idx++; nextCustomer(); }, W.v.gap);
+      return;
+    }
+    drawWork();
+  }else{
+    W.mistakes++;
+    W.missTotal++;
+    W.sad = true;
+    btn.classList.add('shake');
+    W.showing = true;                 // 흔드는 동안 더 못 누르게
+    const len = W.order.length;
+    setTimeout(function(){ if(W) drawWork(); }, 350);   // 흔들림이 끝난 뒤에 다시 그립니다
+    setTimeout(function(){
+      if(!W) return;
+      W.sad = false;
+      W.showing = false;
+      drawWork();
+    }, 1000 + len * 500);
+  }
+}
+function finishWork(){
+  const tip = W.missTotal === 0 ? 100 : 0;
+  const total = W.earned + tip;
+  S.money += total;
+  S.works--;
+  save();
+  workResult(total, tip ? '한 번도 안 틀려서 팁 100원' : '틀려도 괜찮아요');
+}
+
+/* ---------- 공항 미니게임 (C계열) ---------- */
+function lugSVG(color){
+  return '<svg viewBox="0 0 56 56" width="56" height="56" aria-hidden="true">' +
+    '<rect x="21" y="5" width="14" height="11" rx="4" fill="none" stroke="' + color + '" stroke-width="4"/>' +
+    '<rect x="5" y="16" width="46" height="34" rx="9" fill="' + color + '"/>' +
+    '<rect x="5" y="28" width="46" height="6" fill="rgba(255,255,255,0.5)"/>' +
+    '<circle cx="16" cy="42" r="3" fill="rgba(255,255,255,0.65)"/>' +
+    '<circle cx="40" cy="42" r="3" fill="rgba(255,255,255,0.65)"/>' +
+    '</svg>';
+}
+
+let A = null;
+const AIR_TOTAL = 12;
+const AIR_PAY = 33;
+
+function startAirport(kind){
+  A = { v: WORK_C[kind] || WORK_C.bag,
+        bags:[], spawned:0, done:0, hit:0, nextAt:0, last:0, raf:0, w:300, lock:0 };
+  $('work').hidden = false;
+  buildAirport();
+  A.last = performance.now();
+  A.nextAt = A.last + 500;
+  A.raf = requestAnimationFrame(airTick);
+}
+
+function buildAirport(){
+  $('w-me').innerHTML = art(meLook(), 40, true);
+  $('w-step').textContent = A.v.label + ' 0 / ' + AIR_TOTAL;
+  $('w-earned').textContent = won(0);
+  const body = $('w-body');
+  body.innerHTML =
+    '<p class="hint">' + A.v.hint + '</p>' +
+    '<div class="belt" id="belt"><div class="zone" id="zone"></div><div class="rail"></div></div>' +
+    '<div class="tally" id="tally"></div>' +
+    '<div class="bins" id="bins"></div>' +
+    '<div class="row"><button class="btn wide quit" id="a-quit">그만하기</button></div>';
+  const belt = $('belt');
+  A.w = belt.clientWidth || 300;
+  const z = $('zone');
+  z.style.left = Math.round(A.w * 0.56) + 'px';
+  z.style.width = Math.round(A.w * 0.30) + 'px';
+  const bins = $('bins');
+  A.v.kinds.forEach(function(c){
+    const b = document.createElement('button');
+    b.className = 'bin';
+    b.style.background = c.css;
+    if(c.ink) b.style.color = c.ink;
+    b.textContent = c.name;
+    b.addEventListener('click', function(){ sortBag(c.id, b); });
+    bins.appendChild(b);
+  });
+  airTally();
+  $('a-quit').addEventListener('click', stopAirport);
+}
+
+/* 점 줄은 미니게임 다섯이 같은 모양을 씁니다. 전에는 거의 같은 함수가 다섯 벌이었어요.
+   앞에서부터 hit 개는 찬 점, 이어서 miss 개는 흐린 점, 나머지는 빈 점입니다. */
+function drawTally(total, hit, miss){
+  const t = $('tally');
+  if(!t) return;
+  let h = '';
+  for(let i = 0; i < total; i++){
+    const cls = i < hit ? 'dot hit' : (i < hit + (miss || 0) ? 'dot miss' : 'dot');
+    h += '<span class="' + cls + '"></span>';
+  }
+  t.innerHTML = h;
+}
+function airTally(){ if(A) drawTally(AIR_TOTAL, A.hit, A.done - A.hit); }
+
+function airCount(){
+  $('w-step').textContent = A.v.label + ' ' + A.done + ' / ' + AIR_TOTAL;
+  $('w-earned').textContent = won(A.hit * AIR_PAY);
+}
+
+function spawnBag(){
+  const list = A.v.kinds;
+  const c = list[Math.floor(Math.random() * list.length)];
+  const el = document.createElement('div');
+  el.className = 'lug';
+  el.innerHTML = art(A.v.art + c.id, 56);
+  el.style.transform = 'translateX(-60px)';
+  const belt = $('belt');
+  if(!belt) return;
+  belt.appendChild(el);
+  A.bags.push({ el:el, x:-60, c:c.id, k:1, t:0 });
+  A.spawned++;
+}
+
+function airTick(now){
+  if(!A) return;
+  if(!$('belt')) return;
+  const dt = Math.min(64, now - A.last);
+  A.last = now;
+  const base = (0.18 + 0.011 * A.spawned) * A.w / 1000;
+  if(A.spawned < AIR_TOTAL && now >= A.nextAt){
+    spawnBag();
+    A.nextAt = now + 1900;
+  }
+  for(let i = A.bags.length - 1; i >= 0; i--){
+    const b = A.bags[i];
+    if(A.v.dart){
+      b.t -= dt;
+      if(b.t <= 0){
+        b.k = 1 + (Math.random() - 0.5) * A.v.dart;
+        b.t = 450 + Math.random() * 500;
+      }
+    }
+    b.x += base * b.k * dt;
+    b.el.style.transform = 'translateX(' + b.x + 'px)';
+    if(b.x > A.w + 12){
+      b.el.remove();
+      A.bags.splice(i, 1);
+      A.done++;
+      airTally();
+      airCount();
+      if(A.done >= AIR_TOTAL){ finishAirport(); return; }
+    }
+  }
+  A.raf = requestAnimationFrame(airTick);
+}
+
+function shakeBin(btn){
+  if(!btn) return;
+  btn.classList.remove('bad');
+  void btn.offsetWidth;
+  btn.classList.add('bad');
+}
+function sortBag(colorId, btn){
+  if(!A) return;
+  /* 틀려도 벌점이 없으면 세 통을 번갈아 두드리는 것만으로 다 맞습니다.
+     돈을 깎는 대신 잠깐 못 누르게 해서, 색을 보고 고르게 만듭니다. */
+  if(A.lock && performance.now() < A.lock) return;
+  const lo = A.w * 0.56, hi = A.w * 0.86;
+  let best = -1, bestX = -1;
+  for(let i = 0; i < A.bags.length; i++){
+    const b = A.bags[i];
+    /* 눈에 보이는 대로 셉니다 — 가방 몸통이 점선 상자에 조금이라도 걸치면 됩니다.
+       중심(b.x + 28) 기준으로 하면, 가방이 상자 안에 들어와 보이는데도 눌리지 않는
+       구간이 벨트 앞쪽에서 0.4초쯤 생깁니다. 그동안은 신호도 없습니다.
+       뒤에 온 가방보다 앞선 가방부터 처리합니다(먼저 빠져나가니까). */
+    if(b.x + 56 > lo && b.x < hi && b.x > bestX){ best = i; bestX = b.x; }
+  }
+  if(best < 0){ shakeBin(btn); return; }   // 헛스윙도 신호는 줍니다. 잠그지는 않습니다
+  const b = A.bags[best];
+  if(b.c === colorId){
+    A.bags.splice(best, 1);
+    b.el.remove();
+    A.hit++;
+    A.done++;
+    airTally();
+    airCount();
+    if(A.done >= AIR_TOTAL) finishAirport();
+  }else{
+    b.el.classList.remove('bad');
+    void b.el.offsetWidth;
+    b.el.classList.add('bad');
+    A.lock = performance.now() + TUNE.airLock;
+  }
+}
+
+function finishAirport(){
+  if(!A) return;
+  cancelAnimationFrame(A.raf);
+  const tip = A.hit === AIR_TOTAL ? 100 : 0;
+  const total = A.hit * AIR_PAY + tip;
+  S.money += total;
+  S.works--;
+  save();
+  workResult(total, AIR_TOTAL + '개 중에 ' + A.hit + '개를 제자리에 넣었어요' +
+    (tip ? ' · 전부 맞춰서 팁 100원' : ''));
+  $('w-step').textContent = A.v.label + ' ' + AIR_TOTAL + ' / ' + AIR_TOTAL;
+}
+
+function stopAirport(){
+  if(!A) return;
+  cancelAnimationFrame(A.raf);
+  const earned = A.hit * AIR_PAY;
+  if(earned > 0){ S.money += earned; S.works--; save(); }
+  endWork();
+}
+
+/* ---------- 아트 슬롯 목록 (주소 끝에 #art) ---------- */
+function showSheet(){
+  const ids = Object.keys(ART);
+  const have = ids.filter(function(id){ return ART_SRC[id]; }).length;
+  let h = '<h2>아트 슬롯</h2>' +
+    '<p class="hint">모두 ' + ids.length + '칸이고, 그림이 들어간 칸은 ' + have + '개입니다. ' +
+    'ART_SRC에 주소를 적으면 그 칸만 바로 바뀝니다.</p>';
+  Object.keys(GROUPS).forEach(function(g){
+    const list = ids.filter(function(id){ return id.indexOf(g + '/') === 0; });
+    if(!list.length) return;
+    h += '<p class="sheet-h">' + GROUPS[g] + ' · ' + list.length + '칸</p><div class="sheet">';
+    list.forEach(function(id){
+      const s = ART[id];
+      h += '<div class="cell">' + art(id, 56) +
+        '<b>' + s.name + '</b>' +
+        '<span>' + s.w + '×' + s.h + ' · ' + s.bg + '</span>' +
+        '<span class="' + (ART_SRC[id] ? '' : 'no') + '">' + (ART_SRC[id] ? '그림 있음' : '아직 없음') + '</span>' +
+        '<code>' + id + '</code></div>';
+    });
+    h += '</div>';
+  });
+  $('sheet-body').innerHTML = h + '<div class="row"><button class="btn wide" id="sheet-close">닫기</button></div>';
+  $('sheet').hidden = false;
+  $('sheet-close').addEventListener('click', function(){
+    if(location.hash) location.hash = '';
+    else closeSheet();
+  });
+}
+function closeSheet(){ $('sheet').hidden = true; }
+
+/* ---------- 손맛 숫자 화면 (주소 끝에 #tune) ---------- */
+function showTune(){
+  let h = '<h2>손맛 숫자</h2>' +
+    '<p class="hint">아이가 노는 걸 보면서 여기서 바로 고치세요. 코드는 안 건드립니다. ' +
+    '적용하면 화면을 새로 읽지만 진도는 그대로입니다.</p><div class="card">';
+  TUNE_KNOBS.forEach(function(k){
+    h += '<div><label class="lab" for="tn-' + k[0] + '">' + k[1] +
+      (k[2] ? ' (' + k[2] + ')' : '') + '</label>' +
+      '<input class="signbox" type="number" inputmode="decimal" id="tn-' + k[0] + '"' +
+      ' value="' + TUNE[k[0]] + '" step="' + k[3] + '" min="0">' +
+      '<p class="hint">기본 ' + TUNE_DEF[k[0]] + ' · ' + k[4] + '</p></div>';
+  });
+  h += '</div>' +
+    '<div class="row"><button class="btn wide" id="tn-ok">적용하기</button></div>' +
+    '<div class="row"><button class="btn wide" id="tn-def">기본값으로</button>' +
+    '<button class="btn wide" id="tn-close">닫기</button></div>';
+  $('sheet-body').innerHTML = h;
+  $('sheet').hidden = false;
+  $('tn-ok').addEventListener('click', function(){
+    const out = {};
+    TUNE_KNOBS.forEach(function(k){
+      const v = parseFloat($('tn-' + k[0]).value);
+      out[k[0]] = (isFinite(v) && v > 0) ? v : TUNE_DEF[k[0]];
+    });
+    try{ localStorage.setItem(TUNE_KEY, JSON.stringify(out)); }catch(e){}
+    reopenGame();
+  });
+  $('tn-def').addEventListener('click', function(){
+    try{ localStorage.removeItem(TUNE_KEY); }catch(e){}
+    reopenGame();
+  });
+  $('tn-close').addEventListener('click', function(){
+    if(location.hash) location.hash = '';
+    else closeSheet();
+  });
+}
+/* #tune 을 떼고 새로 읽습니다. 안 떼면 새로 읽을 때 이 화면이 또 열려서,
+   고치자마자 아이에게 넘겨주지 못합니다. */
+function reopenGame(){ location.replace(location.href.split('#')[0]); }
+
+window.addEventListener('hashchange', function(){
+  if(location.hash === '#art') showSheet();
+  else if(location.hash === '#tune') showTune();
+  else closeSheet();
+});
+
+/* ---------- 닭갈비 (B계열 · 쫓아다니기) ----------
+   한곳에 두면 탑니다. 손가락으로 밀어서 자리를 옮겨야 안 타고 익습니다.
+   밀면 그 조각의 '한자리에 있던 시간'만 0으로 돌아가고, 익은 정도는 그대로 쌓입니다. */
+let G = null;
+/* 여섯 조각이 다 0초에 시작하면 전부 같은 순간에 완성돼서, 6초 내내 여섯 개를 동시에
+   돌봐야 했습니다. MEAT_STAGGER 만큼 늦게 시작시켜 완성이 흩어지게 했습니다.
+   뒤로 갈수록 남은 조각이 줄어 쉬워집니다. 2학년 손에 맞춰 익는 시간·타는 시간도 늘렸습니다. */
+const MEAT_N = 6, MEAT_DONE = TUNE.meatDone, MEAT_BURN = TUNE.meatBurn, MEAT_PAY = 65, MEAT_STAGGER = TUNE.meatStagger;
+const MEAT_BURN_MAX = 2;   // 한 조각이 깎이는 횟수 상한. 없으면 한 번 태운 조각은 방치가 이득입니다
+
+function startGrill(){
+  G = { pieces:[], done:0, burns:0, last:0, raf:0, w:300, h:200, px:0, py:0, down:false, held:null };
+  $('work').hidden = false;
+  buildGrill();
+  G.last = performance.now();
+  G.raf = requestAnimationFrame(grillTick);
+}
+
+function buildGrill(){
+  $('w-me').innerHTML = art(meLook(), 40, true);
+  $('w-step').textContent = '닭갈비 0 / ' + MEAT_N;
+  $('w-earned').textContent = won(0);
+  const body = $('w-body');
+  body.innerHTML =
+    /* 쓸어도 한 조각만 움직이게 바꿨으니, 안내도 그렇게 적어야 합니다.
+       전에는 "밀어서"라고 적혀 있어서 철판을 문지르게 만들었고, 그러면 한 조각만
+       살아나고 나머지 다섯이 조용히 탑니다. */
+    '<p class="hint">조각을 하나씩 집어서 다른 자리로 옮겨 주세요. ' +
+    '<b>흔들리는 조각</b>이 곧 타는 거예요.</p>' +
+    '<div class="pan" id="pan"><div class="plate"></div></div>' +
+    '<div class="tally" id="tally"></div>' +
+    '<div class="row"><button class="btn wide quit" id="g-quit">그만하기</button></div>';
+  const pan = $('pan');
+  G.w = pan.clientWidth || 300;
+  G.h = pan.clientHeight || 220;
+  for(let i = 0; i < MEAT_N; i++){
+    const el = document.createElement('div');
+    el.className = 'meat';
+    el.innerHTML = art('work/galbi', 50);
+    pan.appendChild(el);
+    const p = {
+      el: el,
+      tint: el.querySelector('.art'),
+      x: 26 + Math.random() * (G.w - 100),
+      y: 26 + Math.random() * (G.h - 100),
+      heat: -i * MEAT_STAGGER, cooked: -i * MEAT_STAGGER, burnt: false, burns: 0
+    };
+    el.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
+    G.pieces.push(p);
+  }
+  pan.addEventListener('pointerdown', grillDown);
+  pan.addEventListener('pointermove', grillMove);
+  pan.addEventListener('pointerup', grillUp);
+  pan.addEventListener('pointercancel', grillUp);
+  drawTally(MEAT_N, G.done, 0);
+  $('g-quit').addEventListener('click', stopGrill);
+}
+/* 손가락 하나가 조각 하나를 집습니다. 전에는 잡히는 상자 안의 조각을 전부 밀어서,
+   한 번 쓸 때마다 여섯 개 중 셋이 한꺼번에 살아났습니다 — 철판을 지그재그로 쓸기만
+   하면 12초에 만점이었고, 조각을 들여다볼 이유가 없었습니다.
+   이제는 집어서 옮겨야 하므로, 어느 조각이 타들어가는지 보고 골라야 합니다. */
+/* 조각 하나를 칠합니다. 익은 정도는 색(진한 갈색으로), 곧 타는 것은 흔들림과
+   테두리빛으로. 두 신호가 겹치지 않아야 아이가 "익는 중"과 "곧 탐"을 구분합니다. */
+function paintMeat(p){
+  if(!p.tint) return;
+  const c = Math.max(0, Math.min(1, p.cooked / MEAT_DONE));
+  const burnt = p.burnt ? 0.5 : 1;
+  p.tint.style.filter = 'saturate(' + (1 + 0.9 * c).toFixed(2) + ') ' +
+                        'brightness(' + ((1 - 0.3 * c) * burnt).toFixed(2) + ')';
+  /* 타기까지 절반쯤 남았을 때부터 알립니다. 2학년이 보고 반응할 시간이 있어야 합니다 */
+  const hot = p.heat > MEAT_BURN * 0.5;
+  if(hot !== p.el.classList.contains('hot')) p.el.classList.toggle('hot', hot);
+}
+function grillDown(e){
+  if(!G) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  G.down = true; G.px = x; G.py = y;
+  G.held = null;
+  let near = Infinity;
+  G.pieces.forEach(function(p){
+    const dx = Math.abs(p.x + 25 - x), dy = Math.abs(p.y + 25 - y);
+    if(dx < TUNE.meatGrab && dy < TUNE.meatGrab && dx * dx + dy * dy < near){
+      near = dx * dx + dy * dy;
+      G.held = p;
+    }
+  });
+  e.currentTarget.setPointerCapture(e.pointerId);
+}
+function grillUp(){ if(G){ G.down = false; G.held = null; } }
+function grillMove(e){
+  if(!G || !G.down || !G.held) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  const dx = x - G.px, dy = y - G.py;
+  G.px = x; G.py = y;
+  const p = G.held;
+  p.x = Math.max(4, Math.min(G.w - 54, p.x + dx));
+  p.y = Math.max(4, Math.min(G.h - 54, p.y + dy));
+  p.heat = 0;
+  p.el.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
+}
+function grillTick(now){
+  if(!G) return;
+  if(!$('pan')) return;
+  const dt = Math.min(64, now - G.last);
+  G.last = now;
+  for(let i = G.pieces.length - 1; i >= 0; i--){
+    const p = G.pieces[i];
+    p.heat += dt;
+    p.cooked += dt;
+    if(p.heat >= MEAT_BURN){
+      p.heat = 0;
+      p.burnt = true;
+      if(p.burns < MEAT_BURN_MAX){ p.burns++; G.burns++; }
+    }
+    paintMeat(p);
+    if(p.cooked >= MEAT_DONE){
+      p.el.classList.remove('hot');
+      p.el.classList.add('pop');
+      const el = p.el;
+      setTimeout(function(){ el.remove(); }, 300);
+      G.pieces.splice(i, 1);
+      /* 집고 있던 조각이 완성되면 손을 놓은 것으로 칩니다. 안 그러면 사라진 조각을
+         계속 끌게 되고, 아이는 왜 아무것도 안 움직이는지 모릅니다. */
+      if(G.held === p) G.held = null;
+      G.done++;
+      drawTally(MEAT_N, G.done, 0);
+      $('w-step').textContent = '닭갈비 ' + G.done + ' / ' + MEAT_N;
+      $('w-earned').textContent = won(grillPay());
+      if(G.done >= MEAT_N){ finishGrill(); return; }
+    }
+  }
+  G.raf = requestAnimationFrame(grillTick);
+}
+function grillPay(){
+  return Math.max(0, Math.round((G.done * MEAT_PAY - G.burns * 20) / 10) * 10);
+}
+function finishGrill(){
+  if(!G) return;
+  cancelAnimationFrame(G.raf);
+  const tip = G.burns === 0 ? 100 : 0;
+  const total = grillPay() + tip;
+  S.money += total;
+  S.works--;
+  save();
+  workResult(total, G.burns === 0 ? '하나도 안 태워서 팁 100원'
+                                  : ('조금 탄 것이 ' + G.burns + '번 있었어요'));
+  $('w-step').textContent = '닭갈비 ' + MEAT_N + ' / ' + MEAT_N;
+}
+function stopGrill(){
+  if(!G) return;
+  cancelAnimationFrame(G.raf);
+  const earned = grillPay();
+  if(earned > 0){ S.money += earned; S.works--; save(); }
+  endWork();
+}
+
+/* ---------- 라떼아트 (B계열 · 정밀하게) ----------
+   끌어내릴수록 주전자가 기웁니다. 많이 기울이면 빨리 차지만 거품이 깨지고,
+   넘기면 흘러버립니다. 점선 위에서 손을 떼야 하트가 생깁니다. */
+let L = null;
+const CUP_N = 3, CUP_GOAL = TUNE.cupGoal, CUP_RUIN = 0.62;
+/* 잔 그림 안에서 "잔 속"이 어디인가. CSS 의 .milk/.foam/.goal 과 같은 자리를 가리킵니다.
+   진짜 work/cup 그림을 재서 옮긴 값입니다: 안쪽 바닥이 cupwrap 아래에서 45px,
+   테두리 앞쪽이 91px. 잔이 임시 도형보다 낮고 넓어서 차는 구간이 79px 에서 46px 로
+   줄었습니다 — 차는 속도(TUNE.latteSpeed)는 level 기준이라 그대로입니다.
+   level 100 이 테두리에 딱 닿게 맞춥니다.
+   ★ 그림을 다시 뽑으면 이 두 숫자와 CSS 네 줄을 다시 재야 합니다. */
+const CUP_BOTTOM = 45, CUP_RIM = 91;
+const CUP_SCALE = (CUP_RIM - CUP_BOTTOM) / 100;
+function milkH(level){ return Math.min(CUP_RIM - CUP_BOTTOM + 8, level * CUP_SCALE); }
+
+function startLatte(){
+  L = { cup:0, level:0, tilt:0, ruined:false, pouring:false, locked:false,
+        startY:0, hearts:0, score:0, last:0, raf:0 };
+  $('work').hidden = false;
+  buildLatte();
+  L.last = performance.now();
+  L.raf = requestAnimationFrame(latteTick);
+}
+
+function buildLatte(){
+  $('w-me').innerHTML = art(meLook(), 40, true);
+  $('w-step').textContent = '잔 1 / ' + CUP_N;
+  $('w-earned').textContent = won(0);
+  const body = $('w-body');
+  body.innerHTML =
+    '<p class="hint">천천히 끌어내려 기울이세요. 점선까지 차면 손을 떼면 됩니다.</p>' +
+    '<div class="latte" id="latte">' +
+      '<div class="pitchwrap" id="pitch"></div>' +
+      '<div class="stream" id="stream"></div>' +
+      '<div class="cupwrap" id="cupwrap">' +
+        '<div class="milk" id="milk"></div>' +
+        '<div class="foam" id="foam"></div>' +
+        '<div class="heart" id="heart"></div>' +
+        '<div class="goal" id="goal"><span>여기까지</span></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="tally" id="tally"></div>' +
+    '<div class="row"><button class="btn wide quit" id="l-quit">그만하기</button></div>';
+  $('pitch').innerHTML = art('work/pitcher', 96);
+  $('cupwrap').insertAdjacentHTML('afterbegin', art('work/cup', 150));
+  $('heart').innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-8-5.1-8-10.2A4.8 4.8 0 0 1 12 7a4.8 4.8 0 0 1 8 3.8C20 15.9 12 21 12 21z" fill="#C98B6B"/></svg>';
+  $('goal').style.bottom = (CUP_BOTTOM + CUP_GOAL * CUP_SCALE) + 'px';
+  const el = $('latte');
+  el.addEventListener('pointerdown', latteDown);
+  el.addEventListener('pointermove', latteMove);
+  el.addEventListener('pointerup', latteUp);
+  el.addEventListener('pointercancel', latteUp);
+  drawTally(CUP_N, L.hearts, L.cup - L.hearts);
+  drawCup();
+  $('l-quit').addEventListener('click', stopLatte);
+}
+function latteDown(e){
+  if(!L || L.locked || L.cup >= CUP_N) return;
+  L.pouring = true; L.startY = e.clientY; L.tilt = 0;
+  e.currentTarget.setPointerCapture(e.pointerId);
+}
+function latteMove(e){
+  if(!L || !L.pouring) return;
+  L.tilt = Math.max(0, Math.min(1, (e.clientY - L.startY) / 120));
+  if(L.tilt > CUP_RUIN) L.ruined = true;
+}
+function latteUp(){
+  if(!L || !L.pouring) return;
+  L.pouring = false; L.tilt = 0;
+  judgeCup();
+}
+function drawCup(){
+  if(!L || !$('milk')) return;
+  const h = milkH(L.level);
+  $('milk').style.height = h + 'px';
+  $('foam').style.bottom = (CUP_BOTTOM + h - 3) + 'px';
+  $('foam').style.opacity = L.level > 4 ? 1 : 0;
+  $('foam').classList.toggle('broken', !!L.ruined);
+  $('pitch').style.transform = 'rotate(' + (L.tilt * 52) + 'deg)';
+  const st = $('stream');
+  st.style.opacity = L.pouring && L.tilt > 0.06 ? 1 : 0;
+  st.style.left = 'calc(50% + 14px)';
+  st.style.top = '92px';
+  /* 주전자 주둥이(92px)에서 우유 표면까지. .latte 250 - .cupwrap 아래 여백 12 = 238 */
+  st.style.height = Math.max(0, (238 - CUP_BOTTOM - h) - 92) + 'px';
+}
+function latteTick(now){
+  if(!L) return;
+  if(!$('latte')) return;
+  const dt = Math.min(64, now - L.last);
+  L.last = now;
+  if(L.pouring && !L.locked){
+    L.level += L.tilt * TUNE.latteSpeed * dt / 1000;
+    if(L.level > 125){ L.level = 125; L.pouring = false; L.tilt = 0; judgeCup(); }
+  }
+  drawCup();
+  L.raf = requestAnimationFrame(latteTick);
+}
+function judgeCup(){
+  if(!L) return;
+  let pay = 40, msg = '';
+  if(L.level > 100){ msg = '넘쳤어요'; }
+  else if(L.level < CUP_GOAL){ msg = '덜 찼어요'; }
+  else if(L.ruined){ pay = 80; msg = '너무 세게 부어서 하트는 못 그렸어요'; }
+  else { pay = 130; L.hearts++; msg = '하트 성공!'; }
+  L.score += pay;
+  L.cup++;
+  drawTally(CUP_N, L.hearts, L.cup - L.hearts);
+  $('w-earned').textContent = won(L.score);
+  $('heart').style.opacity = (pay === 130) ? 1 : 0;   // 하트 성공 삯이 130원입니다
+  $('heart').style.bottom = (CUP_BOTTOM + milkH(L.level) - 16) + 'px';
+  L.locked = true;
+  $('w-step').textContent = msg;
+  if(L.cup >= CUP_N){
+    setTimeout(function(){ if(L) finishLatte(); }, 1000);
+    return;
+  }
+  setTimeout(function(){
+    if(!L) return;
+    L.level = 0; L.ruined = false; L.tilt = 0; L.locked = false;
+    $('heart').style.opacity = 0;
+    $('w-step').textContent = '잔 ' + (L.cup + 1) + ' / ' + CUP_N;
+    drawCup();
+  }, 1000);
+}
+function finishLatte(){
+  if(!L) return;
+  cancelAnimationFrame(L.raf);
+  const tip = L.hearts === CUP_N ? 100 : 0;
+  const total = L.score + tip;
+  S.money += total;
+  S.works--;
+  save();
+  workResult(total, '하트 ' + L.hearts + '개' + (tip ? ' · 세 잔 다 성공해서 팁 100원' : ''));
+  $('w-step').textContent = '잔 ' + CUP_N + ' / ' + CUP_N;
+}
+function stopLatte(){
+  if(!L) return;
+  cancelAnimationFrame(L.raf);
+  if(L.score > 0){ S.money += L.score; S.works--; save(); }
+  endWork();
+}
+
+/* ---------- 비빔밥 (B계열 · 넓게 칠하기) ----------
+   그릇을 여덟 칸 × 여덟 줄로 나누고, 손가락이 지나간 자리만 섞입니다.
+   안 섞인 구역이 색으로 남아 보이므로 빠진 데를 찾아 메우게 됩니다.
+   닭갈비가 한 점을 쫓는 게임이라면 이건 넓이를 메우는 게임입니다. */
+let B = null;
+const BOWL_N = 3, BOWL_SIDE = 8, BOWL_DONE = 85, BOWL_PAY = 130, BOWL_FAST = 36000;
+const BIBIM_COLORS = ['#7FA85E', '#D9A441', '#C4553C', '#EDE3CB', '#6E7F4E', '#A8C06E'];
+
+function startBibim(){
+  B = { bowl:0, cells:[], score:0, down:false, locked:false, t0:0 };
+  $('work').hidden = false;
+  buildBibim();
+  B.t0 = performance.now();
+  newBowl();
+}
+function buildBibim(){
+  $('w-me').innerHTML = art(meLook(), 40, true);
+  $('w-step').textContent = '그릇 1 / ' + BOWL_N;
+  $('w-earned').textContent = won(0);
+  $('w-body').innerHTML =
+    '<p class="hint">손가락으로 둥글게 비벼 주세요. 색이 하나가 되면 완성이에요.</p>' +
+    '<div class="bowl" id="bowl"><div class="cells" id="cells"></div></div>' +
+    '<div class="tally" id="tally"></div>' +
+    '<div class="row"><button class="btn wide quit" id="b-quit">그만하기</button></div>';
+  const el = $('bowl');
+  el.addEventListener('pointerdown', bibimDown);
+  el.addEventListener('pointermove', bibimMove);
+  el.addEventListener('pointerup', bibimUp);
+  el.addEventListener('pointercancel', bibimUp);
+  $('b-quit').addEventListener('click', stopBibim);
+  drawTally(BOWL_N, B.bowl, 0);
+}
+function newBowl(){
+  const box = $('cells');
+  if(!box) return;
+  box.innerHTML = '';
+  B.cells = [];
+  const n = BOWL_SIDE * BOWL_SIDE;
+  for(let i = 0; i < n; i++){
+    const col = i % BOWL_SIDE, row = Math.floor(i / BOWL_SIDE);
+    const fx = (col + 0.5) / BOWL_SIDE, fy = (row + 0.5) / BOWL_SIDE;
+    const dead = Math.sqrt((fx - 0.5) * (fx - 0.5) + (fy - 0.5) * (fy - 0.5)) > 0.47;
+    const d = document.createElement('div');
+    d.className = 'cell2';
+    d.style.background = BIBIM_COLORS[Math.floor(Math.random() * BIBIM_COLORS.length)];
+    const m = document.createElement('div');
+    m.className = 'mx';
+    d.appendChild(m);
+    box.appendChild(d);
+    B.cells.push({ mx:m, v:0, dead:dead, fx:fx, fy:fy });
+  }
+  B.locked = false;
+  const bowl = $('bowl');
+  if(bowl) bowl.classList.remove('done');
+}
+function bibimDown(e){
+  if(!B || B.locked) return;
+  B.down = true;
+  e.currentTarget.setPointerCapture(e.pointerId);
+  bibimMove(e);
+}
+function bibimUp(){ if(B) B.down = false; }
+function bibimMove(e){
+  if(!B || !B.down || B.locked) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+  let all = true;
+  B.cells.forEach(function(c){
+    const dx = c.fx - fx, dy = c.fy - fy;
+    if(Math.sqrt(dx * dx + dy * dy) < TUNE.brush) c.v = Math.min(100, c.v + TUNE.brushInk);
+    c.mx.style.opacity = c.v / 100;
+    if(!c.dead && c.v < BOWL_DONE) all = false;
+  });
+  if(all) finishBowl();
+}
+function finishBowl(){
+  B.locked = true;
+  B.down = false;
+  B.score += BOWL_PAY;
+  B.bowl++;
+  drawTally(BOWL_N, B.bowl, 0);
+  $('w-earned').textContent = won(B.score);
+  const bowl = $('bowl');
+  if(bowl) bowl.classList.add('done');
+  if(B.bowl >= BOWL_N){
+    $('w-step').textContent = '완성!';
+    setTimeout(function(){ if(B) finishBibim(); }, 800);
+    return;
+  }
+  $('w-step').textContent = '완성! 다음 그릇';
+  setTimeout(function(){
+    if(!B) return;
+    newBowl();
+    $('w-step').textContent = '그릇 ' + (B.bowl + 1) + ' / ' + BOWL_N;
+  }, 800);
+}
+function finishBibim(){
+  if(!B) return;
+  const fast = (performance.now() - B.t0) < BOWL_FAST;
+  const tip = fast ? 100 : 0;
+  const total = B.score + tip;
+  S.money += total;
+  S.works--;
+  save();
+  workResult(total, fast ? '손이 빨라서 팁 100원' : '세 그릇 다 비볐어요');
+  $('w-step').textContent = '그릇 ' + BOWL_N + ' / ' + BOWL_N;
+}
+function stopBibim(){
+  if(!B) return;
+  if(B.score > 0){ S.money += B.score; S.works--; save(); }
+  endWork();
+}
+
+/* ---------- 귤 (C계열 · 쓸어서 받기) ----------
+   위쪽 나뭇잎을 손가락으로 쓸면 그 자리 귤이 떨어집니다.
+   바구니는 손가락의 좌우 위치를 늘 따라다니므로, 쓸고 내려와 받는 한 손 리듬이 됩니다. */
+let Y = null;
+const GYUL_N = 12, GYUL_PAY = 33;
+
+function startGyul(){
+  Y = { fruit:[], caught:0, gone:0, bx:150, last:0, raf:0, w:300, h:300 };
+  $('work').hidden = false;
+  buildGyul();
+  Y.last = performance.now();
+  Y.raf = requestAnimationFrame(gyulTick);
+}
+function buildGyul(){
+  $('w-me').innerHTML = art(meLook(), 40, true);
+  $('w-step').textContent = '귤 0 / ' + GYUL_N;
+  $('w-earned').textContent = won(0);
+  $('w-body').innerHTML =
+    '<p class="hint">위쪽 잎을 쓸면 귤이 떨어져요. 바구니는 손가락을 따라갑니다.</p>' +
+    '<div class="grove" id="grove"><div class="leaf"></div><div class="ground"></div>' +
+      '<div class="basket" id="basket"></div></div>' +
+    '<div class="tally" id="tally"></div>' +
+    '<div class="row"><button class="btn wide quit" id="y-quit">그만하기</button></div>';
+  const g = $('grove');
+  Y.w = g.clientWidth || 300;
+  Y.h = g.clientHeight || 300;
+  Y.bx = Y.w / 2;
+  for(let i = 0; i < GYUL_N; i++){
+    const el = document.createElement('div');
+    el.className = 'gy';
+    el.innerHTML = art('work/orange', 30);
+    g.appendChild(el);
+    const o = {
+      el: el,
+      x: 16 + Math.random() * (Y.w - 62),
+      y: 14 + Math.random() * (Y.h * 0.34 - 30),
+      on: true, vy: 0
+    };
+    el.style.transform = 'translate(' + o.x + 'px,' + o.y + 'px)';
+    Y.fruit.push(o);
+  }
+  $('basket').innerHTML = art('work/basket', 70);
+  g.addEventListener('pointerdown', gyulMove);
+  g.addEventListener('pointermove', gyulMove);
+  drawTally(GYUL_N, Y.caught, Y.gone);
+  $('y-quit').addEventListener('click', stopGyul);
+}
+function gyulMove(e){
+  if(!Y) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  Y.bx = Math.max(35, Math.min(Y.w - 35, x));
+  if(y < Y.h * 0.44){
+    Y.fruit.forEach(function(o){
+      if(o.on && Math.abs(o.x + 15 - x) < TUNE.gyulGrab && Math.abs(o.y + 15 - y) < TUNE.gyulGrab){
+        o.on = false;
+        o.vy = 0.04;
+        /* 떨어지면서 옆으로 흐릅니다. 안 그러면 흔든 자리에 바구니가 이미 있어서
+           손가락을 가만히 두기만 해도 전부 들어갔습니다. */
+        o.vx = (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.55) * TUNE.gyulDrift;
+      }
+    });
+  }
+}
+function gyulTick(now){
+  if(!Y) return;
+  if(!$('grove')) return;
+  const dt = Math.min(64, now - Y.last);
+  Y.last = now;
+  const bk = $('basket');
+  if(bk) bk.style.transform = 'translateX(' + (Y.bx - 35) + 'px)';
+  const floor = Y.h - 54;
+  for(let i = Y.fruit.length - 1; i >= 0; i--){
+    const o = Y.fruit[i];
+    if(o.on) continue;
+    o.vy += 0.0011 * dt;
+    o.y += o.vy * dt;
+    o.x += (o.vx || 0) * dt;
+    if(o.x < 2 || o.x > Y.w - 32){ o.vx = -(o.vx || 0); }   // 가장자리에서 되튕깁니다
+    o.x = Math.max(2, Math.min(Y.w - 32, o.x));
+    o.el.style.transform = 'translate(' + o.x + 'px,' + o.y + 'px)';
+    if(o.y >= floor){
+      const hit = Math.abs(o.x + 15 - Y.bx) < TUNE.gyulCatch;
+      if(hit) Y.caught++; else Y.gone++;
+      o.el.remove();
+      Y.fruit.splice(i, 1);
+      drawTally(GYUL_N, Y.caught, Y.gone);
+      $('w-step').textContent = '귤 ' + Y.caught + ' / ' + GYUL_N;
+      $('w-earned').textContent = won(Y.caught * GYUL_PAY);
+      if(Y.caught + Y.gone >= GYUL_N){ finishGyul(); return; }
+    }
+  }
+  Y.raf = requestAnimationFrame(gyulTick);
+}
+function finishGyul(){
+  if(!Y) return;
+  cancelAnimationFrame(Y.raf);
+  const tip = Y.caught === GYUL_N ? 100 : 0;
+  const total = Y.caught * GYUL_PAY + tip;
+  S.money += total;
+  S.works--;
+  save();
+  workResult(total, GYUL_N + '개 중에 ' + Y.caught + '개를 받았어요' +
+    (tip ? ' · 다 받아서 팁 100원' : ''));
+  $('w-step').textContent = '귤 ' + Y.caught + ' / ' + GYUL_N;
+}
+function stopGyul(){
+  if(!Y) return;
+  cancelAnimationFrame(Y.raf);
+  const earned = Y.caught * GYUL_PAY;
+  if(earned > 0){ S.money += earned; S.works--; save(); }
+  endWork();
+}
+
+/* 결과 화면은 모든 미니게임이 이 하나를 같이 씁니다.
+   전에는 일곱 군데가 같은 열여덟 줄을 따로 들고 있었습니다. */
+function workResult(total, note){
+  const body = $('w-body');
+  body.innerHTML = '';
+  const r = document.createElement('div');
+  r.className = 'order result';
+  r.innerHTML =
+    '<div style="font-family:var(--font-display); font-size:19px">오늘 일 끝!</div>' +
+    '<div class="big">' + won(total) + '</div>' +
+    '<div class="hint">' + note + '</div>';
+  body.appendChild(r);
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = '<button class="btn go wide" id="w-done">가방에 넣기</button>';
+  body.appendChild(row);
+  $('w-earned').textContent = won(total);
+  $('w-done').addEventListener('click', endWork);
+}
+
+/* ---------- 겹화면 ----------
+   겹화면이 떠 있는 동안 뒤쪽 .app 을 inert 로 꺼 둡니다. 안 그러면 미니게임 중에도
+   탭 키가 뒤로 새서 '밥 주기'·'불 끄고 자기' 같은 버튼 열한 개에 닿습니다.
+   hidden 이 바뀌는 자리가 여기저기라, 어느 길로 열고 닫히든 걸리게 지켜봅니다. */
+const OVERLAYS = ['work', 'intro', 'sheet', 'night', 'yay', 'ride'];
+function syncOverlays(){
+  const open = OVERLAYS.filter(function(id){ const el = $(id); return el && !el.hidden; }).length > 0;
+  const app = document.querySelector('.app');
+  if(app) app.inert = open;
+}
+const overlayWatch = new MutationObserver(syncOverlays);
+OVERLAYS.forEach(function(id){
+  const el = $(id);
+  if(el) overlayWatch.observe(el, { attributes:true, attributeFilter:['hidden'] });
+});
+syncOverlays();
+
+/* Esc 로 닫는 것은 "보기만 하는" 겹화면뿐입니다. 일하기는 그만하기로 끝내야
+   삯 계산을 거치고, 시작 화면은 이름을 정하기 전엔 나갈 데가 없습니다. */
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Escape') return;
+  if(!$('yay').hidden){ $('yay-close').click(); return; }
+  if(!$('night').hidden){ $('night-close').click(); return; }
+  if(!$('sheet').hidden){
+    if(location.hash) location.hash = '';
+    else closeSheet();
+  }
+});
+
+/* ---------- 시작 ---------- */
+function start(data){
+  if(data && data.S) Object.assign(S, data.S);
+  else load();
+  normalize();
+  const gap = rollover();
+  render();
+  go(S.tab || 'hamster');
+  if(location.hash === '#art') showSheet();
+  else if(location.hash === '#tune') showTune();
+  else if(!S.me.name) showIntro();
+  else if(gap >= 2){ go('hamster'); say('기다렸어!', null); }
+}
+if(window.claude && window.claude.hot && window.claude.hot.snapshot){
+  window.claude.hot.snapshot(function(){ return { S: S }; });
+}
+if(window.claude && window.claude.hot && window.claude.hot.ready){
+  window.claude.hot.ready(start);
+}else{
+  start(null);
+}
+</script>
+
+</body>
+</html>
