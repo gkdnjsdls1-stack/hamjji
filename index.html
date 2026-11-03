@@ -522,6 +522,16 @@
          border-radius:14px; overflow:hidden; background:#CFC4B2}
   .chip{position:relative}
   .chip .on{position:absolute; inset:0; background:#E8D5AE; opacity:0; transition:opacity .12s}
+  /* 쓰담 — 햄찌를 가운데 크게. transform 대신 음수 margin 으로 가운데를 잡습니다.
+     transform 을 쓰면 offsetLeft 가 안 따라와서 "손가락이 햄찌 위인가" 판정이 어긋납니다. */
+  .care-ham.big{right:auto; bottom:auto; left:50%; top:50%; width:150px; margin-left:-75px; margin-top:-65px}
+  .pop-heart{position:absolute; width:22px; height:22px; pointer-events:none;
+             animation:heartup .9s ease-out forwards}
+  @keyframes heartup{
+    0%{transform:translateY(0) scale(.6); opacity:0}
+    25%{opacity:1}
+    100%{transform:translateY(-46px) scale(1.1); opacity:0}
+  }
   .gaugebar{height:12px; background:var(--sunk); border-radius:6px; overflow:hidden}
   .gaugebar .gauge{height:100%; width:0; background:var(--sage); border-radius:6px; transition:width .1s linear}
 
@@ -1507,10 +1517,7 @@ function drawCare(){
   box.appendChild(careButton('밥 주기',   S.inv.food + '개',  function(){ startCare('food'); },  task === 'fed'));
   box.appendChild(careButton('물 주기',   S.inv.water + '개', function(){ startCare('water'); }));
   box.appendChild(careButton('톱밥 갈기', S.inv.bed + '개',   function(){ startCare('bed'); }));
-  play.appendChild(playButton('쓰담', function(){
-    S.mood = clamp(S.mood + 12); S.today.played = true;
-    say(T.pet, 'glad'); after();
-  }, task === 'played'));
+  play.appendChild(playButton('쓰담', function(){ startCare('pet'); }, task === 'played'));
   play.appendChild(playButton('간식 ' + S.inv.treat, function(){
     if(S.inv.treat <= 0){ say(T.noTreat, null); return; }
     S.inv.treat--; S.mood = clamp(S.mood + 20); S.hunger = clamp(S.hunger + 10); S.today.played = true;
@@ -2984,7 +2991,7 @@ function buildLatte(){
   $('pitch').innerHTML = art('work/pitcher', 96);
   $('cupwrap').insertAdjacentHTML('afterbegin', art('work/cup', 150));
   $('heart').innerHTML =
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-8-5.1-8-10.2A4.8 4.8 0 0 1 12 7a4.8 4.8 0 0 1 8 3.8C20 15.9 12 21 12 21z" fill="#C98B6B"/></svg>';
+    heartSVG('#C98B6B');
   $('goal').style.bottom = (CUP_BOTTOM + CUP_GOAL * CUP_SCALE) + 'px';
   const el = $('latte');
   el.addEventListener('pointerdown', latteDown);
@@ -3363,12 +3370,18 @@ const CARE = {
     title:'톱밥 갈기', hint:'톱밥을 손가락으로 문질러 바닥에 펴 주세요',
     none:T.noBed,   say:['폭신폭신해졌다', 'glad'], bar:true, build:buildBed,
     done:function(){ S.bed = 100; S.mood = clamp(S.mood + 6); }
+  },
+  /* 쓰담만 free 입니다 — 물건을 안 쓰고 몇 번이든 할 수 있습니다. 그래서 제일 짧습니다 */
+  pet: {
+    title:'쓰담',    hint:'햄찌를 손가락으로 살살 문질러 주세요',
+    free:true,      say:[T.pet, 'glad'], bar:true, build:buildPet,
+    done:function(){ S.mood = clamp(S.mood + 12); S.today.played = true; }
   }
 };
 
 function startCare(kind){
   const v = CARE[kind];
-  if(S.inv[kind] <= 0){ say(v.none, null); return; }
+  if(!v.free && S.inv[kind] <= 0){ say(v.none, null); return; }
   C = { kind:kind, v:v, raf:0, last:0, gauge:0, done:false, drink:false };
   $('care-body').innerHTML =
     '<h2>' + v.title + '</h2>' +
@@ -3398,7 +3411,7 @@ function finishCare(){
     if(!C) return;
     C = null;
     $('care-ov').hidden = true;
-    S.inv[kind]--;
+    if(!v.free) S.inv[kind]--;
     v.done();
     say(v.say[0], v.say[1]);
     after();
@@ -3415,7 +3428,9 @@ function careXY(e, box){
 function careFace(kind){
   const h = $('care-ham');
   if(!h) return;
-  h.innerHTML = art('hamster/' + kind, 108);
+  /* 크기는 상자에서 읽습니다. 108 로 박아 뒀더니 150px 인 쓰담에서 표정이 바뀌는 순간
+     햄찌가 작아지고, .big 의 음수 margin 이 그 높이로 계산돼 자리까지 틀어졌습니다. */
+  h.innerHTML = art('hamster/' + kind, h.clientWidth || 108);
   if(h.firstChild && h.firstChild.classList) h.firstChild.classList.add('bounce');
 }
 /* 상자끼리 겹치나. 가운데로 재면 자리에 들어와 보이는데도 안 눌리는 구간이 생깁니다 —
@@ -3536,6 +3551,66 @@ function waterTick(now){
     if(C.gauge >= 100){ finishCare(); return; }
   }
   C.raf = requestAnimationFrame(waterTick);
+}
+
+/* 하트는 라떼와 쓰담 두 곳이 같이 씁니다 */
+function heartSVG(fill){
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-8-5.1-8-10.2' +
+         'A4.8 4.8 0 0 1 12 7a4.8 4.8 0 0 1 8 3.8C20 15.9 12 21 12 21z" fill="' + fill + '"/></svg>';
+}
+
+/* 쓰담 — 햄찌 위를 문지릅니다.
+   톱밥과 손놀림은 같지만 재는 것이 다릅니다. 톱밥은 '빠짐없이 덮었나'(넓이)라
+   구석을 찾아다녀야 하고, 쓰담은 '얼마나 쓰다듬었나'(길이)라 아무 데나 문질러도
+   됩니다 — 쓰다듬는 데 구석이 있으면 이상합니다.
+   물건을 안 쓰고 몇 번이든 할 수 있는 자리라 제일 짧게 뒀습니다. */
+const PET_LEN = 700;   // 문질러야 하는 거리(px). 햄찌 폭을 네댓 번 왕복하면 됩니다
+function buildPet(box){
+  box.innerHTML = '<div class="care-ham big" id="care-ham">' + art('hamster/idle', 150) + '</div>';
+  const ham = $('care-ham');
+  let down = false, lx = 0, ly = 0, started = false;
+  function onHam(x, y){
+    return x > ham.offsetLeft && x < ham.offsetLeft + ham.offsetWidth &&
+           y > ham.offsetTop  && y < ham.offsetTop  + ham.offsetHeight;
+  }
+  function heart(x, y){
+    /* 손가락마다 하나씩 띄우면 1초에 예순 개가 뜹니다. 솎아 냅니다 */
+    const t = performance.now();
+    if(C.heartAt && t - C.heartAt < 220) return;
+    C.heartAt = t;
+    const h = document.createElement('div');
+    h.className = 'pop-heart';
+    h.style.left = (x - 11) + 'px';
+    h.style.top = (y - 26) + 'px';
+    h.innerHTML = heartSVG('#E89AA8');
+    box.appendChild(h);
+    setTimeout(function(){ h.remove(); }, 900);
+  }
+  function rub(e){
+    if(!C || C.done || !down) return;
+    const q = careXY(e, box);
+    if(!onHam(q.x, q.y)){ lx = q.x; ly = q.y; return; }
+    const dx = q.x - lx, dy = q.y - ly;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    lx = q.x; ly = q.y;
+    if(d <= 0) return;
+    if(!started){ started = true; careFace('glad'); }
+    /* 한 번에 40px 까지만 셉니다. 안 그러면 화면 끝에서 끝으로 한 번 긋고 끝납니다 */
+    C.gauge += Math.min(d, 40) * 100 / PET_LEN;
+    careGauge(C.gauge);
+    heart(q.x, q.y);
+    if(C.gauge >= 100) finishCare();
+  }
+  box.addEventListener('pointerdown', function(e){
+    if(!C || C.done) return;
+    const q = careXY(e, box);
+    down = true; lx = q.x; ly = q.y;
+    box.setPointerCapture(e.pointerId);
+  });
+  box.addEventListener('pointermove', rub);
+  function up(){ down = false; }
+  box.addEventListener('pointerup', up);
+  box.addEventListener('pointercancel', up);
 }
 
 /* 톱밥 — 문질러 펴 바릅니다. 지나간 칸이 덮이고 더미는 작아집니다 */
