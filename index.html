@@ -498,6 +498,33 @@
   .dot.hit{background:var(--sage)}
   .dot.miss{background:var(--line)}
 
+  /* ---------- 돌보기 — 손으로 하는 동작 ----------
+     판정도 점수도 없습니다. 다 하면 끝나고, 그만두면 물건이 안 줄어듭니다.
+     하루 제한이 없는 자리라 길면 지겨워집니다 — 밥 1초, 물 3초, 톱밥 4초쯤. */
+  .care-stage{position:relative; height:250px; border-radius:22px; overflow:hidden;
+              background:var(--surface-2); border:1px solid var(--line); touch-action:none; cursor:grab}
+  .care-ham{position:absolute; right:8px; bottom:6px; width:108px; pointer-events:none}
+  /* 끄는 물건. pointer-events 를 끄는 이유는 닭갈비 조각과 같습니다 — 잡는 자리는
+     손가락과 물건의 거리로 재야지, 투명한 PNG 여백이 가로채면 안 됩니다. */
+  .grab{position:absolute; left:0; top:0; will-change:transform; pointer-events:none}
+  /* 점선 자리. 공항·어시장의 점선 상자와 같은 말이라 아이가 이미 배운 신호입니다 */
+  .spot{position:absolute; left:16px; bottom:12px; width:92px; height:58px;
+        border:2px dashed var(--sage); border-radius:14px; background:rgba(95,167,143,0.10)}
+  /* 입 자리와 물방울은 햄찌 상자에서 재서 JS 가 놓습니다 (buildWater).
+     px 로 박아 두면 햄찌 크기를 건드리는 순간 점선이 얼굴 옆으로 밀립니다 — 실제로 밀렸습니다. */
+  /* 속을 채우면 햄찌 얼굴을 가립니다. 점선만 둘러 얼굴이 비쳐 보이게 둡니다 */
+  .mouth{position:absolute; border:2px dashed var(--sage); border-radius:50%}
+  .sip{position:absolute; width:9px; height:9px;
+       border-radius:50%; background:#8FC8E4; animation:sip .5s ease-in infinite}
+  @keyframes sip{0%{transform:translateY(0); opacity:1}100%{transform:translateY(14px); opacity:0}}
+  .chips{position:absolute; left:10px; right:124px; bottom:10px; height:96px;
+         display:grid; grid-template-columns:repeat(5,1fr); grid-template-rows:repeat(3,1fr);
+         border-radius:14px; overflow:hidden; background:#CFC4B2}
+  .chip{position:relative}
+  .chip .on{position:absolute; inset:0; background:#E8D5AE; opacity:0; transition:opacity .12s}
+  .gaugebar{height:12px; background:var(--sunk); border-radius:6px; overflow:hidden}
+  .gaugebar .gauge{height:100%; width:0; background:var(--sage); border-radius:6px; transition:width .1s linear}
+
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.01ms !important; transition-duration:.01ms !important}
   }
@@ -635,6 +662,10 @@
 </div>
 
 <div class="work" id="sheet" role="dialog" aria-modal="true" aria-label="어른용 설정" hidden><div class="inner" id="sheet-body"></div></div>
+
+<div class="work" id="care-ov" role="dialog" aria-modal="true" aria-label="햄찌 돌보기" hidden>
+  <div class="inner" id="care-body"></div>
+</div>
 
 <div class="ride" id="ride" role="dialog" aria-modal="true" aria-label="가는 중" hidden>
   <div class="window"><div class="scenery" id="scenery"></div><div class="rider" id="rider"></div></div>
@@ -1471,21 +1502,11 @@ function drawCare(){
   const task = nextTask();
   box.innerHTML = '';
   play.innerHTML = '';
-  box.appendChild(careButton('밥 주기', S.inv.food + '개', function(){
-    if(S.inv.food <= 0){ say(T.noFood, null); return; }
-    S.inv.food--; S.hunger = 100; S.mood = clamp(S.mood + 8); S.today.fed = true;
-    say(T.eating, 'eat'); after();
-  }, task === 'fed'));
-  box.appendChild(careButton('물 주기', S.inv.water + '개', function(){
-    if(S.inv.water <= 0){ say(T.noWater, null); return; }
-    S.inv.water--; S.thirst = 100; S.mood = clamp(S.mood + 4);
-    say('꿀꺽꿀꺽', 'eat'); after();
-  }));
-  box.appendChild(careButton('톱밥 갈기', S.inv.bed + '개', function(){
-    if(S.inv.bed <= 0){ say(T.noBed, null); return; }
-    S.inv.bed--; S.bed = 100; S.mood = clamp(S.mood + 6);
-    say('폭신폭신해졌다', 'glad'); after();
-  }));
+  /* 셋 다 겹화면을 엽니다. 줄어들고 좋아지는 것은 손으로 다 한 뒤에만 일어납니다 —
+     CARE 표와 startCare 를 보세요. */
+  box.appendChild(careButton('밥 주기',   S.inv.food + '개',  function(){ startCare('food'); },  task === 'fed'));
+  box.appendChild(careButton('물 주기',   S.inv.water + '개', function(){ startCare('water'); }));
+  box.appendChild(careButton('톱밥 갈기', S.inv.bed + '개',   function(){ startCare('bed'); }));
   play.appendChild(playButton('쓰담', function(){
     S.mood = clamp(S.mood + 12); S.today.played = true;
     say(T.pet, 'glad'); after();
@@ -3314,11 +3335,256 @@ function workResult(total, note){
   $('w-done').addEventListener('click', endWork);
 }
 
+/* ---------- 돌보기 — 손으로 하는 동작 ----------
+   버튼 한 번으로 끝나던 셋을 손으로 하게 바꿉니다. 판정도 점수도 없고, 틀릴 수도
+   없습니다 — 다 하면 끝납니다. 그만두면 물건이 안 줄어듭니다(미니게임 여섯 곳의
+   '그만하기'와 같은 규칙입니다).
+
+   동작은 그림이 정해 줬습니다. goods/food 는 밥이 담긴 그릇이고, goods/water 는
+   주둥이가 달린 급수병이고, goods/bed 는 톱밥 더미입니다. 그래서 그릇은 자리에
+   놓아 주고, 병은 입에 대 주고, 톱밥은 펴 바릅니다 — 셋이 다른 손놀림입니다.
+   새 아트 칸은 하나도 안 씁니다.
+
+   길이도 일부러 다르게 뒀습니다. 하루 세 번 제한이 있는 일하기와 달리 돌보기는
+   언제든 열려 있어서, 셋 다 같은 무게면 금세 지겨워집니다. */
+let C = null;
+const CARE = {
+  food: {
+    title:'밥 주기',   hint:'밥그릇을 햄찌 앞 점선 자리에 놓아 주세요',
+    none:T.noFood,  say:[T.eating, 'eat'], bar:false, build:buildFeed,
+    done:function(){ S.hunger = 100; S.mood = clamp(S.mood + 8); S.today.fed = true; }
+  },
+  water: {
+    title:'물 주기',   hint:'물병 주둥이를 햄찌 입에 대 주세요. 다 마실 때까지 들고 있어요',
+    none:T.noWater, say:['꿀꺽꿀꺽', 'eat'],  bar:true,  build:buildWater,
+    done:function(){ S.thirst = 100; S.mood = clamp(S.mood + 4); }
+  },
+  bed: {
+    title:'톱밥 갈기', hint:'톱밥을 손가락으로 문질러 바닥에 펴 주세요',
+    none:T.noBed,   say:['폭신폭신해졌다', 'glad'], bar:true, build:buildBed,
+    done:function(){ S.bed = 100; S.mood = clamp(S.mood + 6); }
+  }
+};
+
+function startCare(kind){
+  const v = CARE[kind];
+  if(S.inv[kind] <= 0){ say(v.none, null); return; }
+  C = { kind:kind, v:v, raf:0, last:0, gauge:0, done:false, drink:false };
+  $('care-body').innerHTML =
+    '<h2>' + v.title + '</h2>' +
+    '<p class="hint">' + v.hint + '</p>' +
+    '<div class="gaugebar"' + (v.bar ? '' : ' hidden') + '><div class="gauge" id="care-gauge"></div></div>' +
+    '<div class="care-stage" id="care-stage"></div>' +
+    '<div class="row"><button class="btn wide quit" id="care-quit">그만두기</button></div>';
+  $('care-ov').hidden = false;
+  v.build($('care-stage'));
+  $('care-quit').addEventListener('click', stopCare);
+}
+/* 그만두기 — 아무 일도 없었던 것으로 합니다 */
+function stopCare(){
+  if(C && C.raf) cancelAnimationFrame(C.raf);
+  C = null;
+  $('care-ov').hidden = true;
+}
+function finishCare(){
+  if(!C || C.done) return;
+  C.done = true;
+  if(C.raf){ cancelAnimationFrame(C.raf); C.raf = 0; }
+  const q = $('care-quit');
+  if(q) q.disabled = true;          // 다 한 뒤에 물리면 공짜가 됩니다
+  const v = C.v, kind = C.kind;
+  /* 0.9초는 보여주는 시간입니다. 바로 닫으면 햄찌가 먹는 걸 못 봅니다 */
+  setTimeout(function(){
+    if(!C) return;
+    C = null;
+    $('care-ov').hidden = true;
+    S.inv[kind]--;
+    v.done();
+    say(v.say[0], v.say[1]);
+    after();
+  }, 900);
+}
+function careGauge(n){
+  const g = $('care-gauge');
+  if(g) g.style.width = Math.max(0, Math.min(100, n)) + '%';
+}
+function careXY(e, box){
+  const r = box.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function careFace(kind){
+  const h = $('care-ham');
+  if(!h) return;
+  h.innerHTML = art('hamster/' + kind, 108);
+  if(h.firstChild && h.firstChild.classList) h.firstChild.classList.add('bounce');
+}
+/* 상자끼리 겹치나. 가운데로 재면 자리에 들어와 보이는데도 안 눌리는 구간이 생깁니다 —
+   공항·어시장에서 이미 겪고 겹침으로 바꾼 자리입니다. */
+function hits(x, y, w, h, el){
+  return x + w > el.offsetLeft && x < el.offsetLeft + el.offsetWidth &&
+         y + h > el.offsetTop  && y < el.offsetTop  + el.offsetHeight;
+}
+
+/* 밥 — 그릇을 끌어다 점선 자리에 놓습니다. 한 동작이라 제일 짧습니다 */
+function buildFeed(box){
+  const SZ = 78;
+  box.innerHTML =
+    '<div class="spot" id="spot"></div>' +
+    '<div class="care-ham" id="care-ham">' + art('hamster/idle', 108) + '</div>' +
+    '<div class="grab" id="grab">' + art('goods/food', SZ) + '</div>';
+  const w = box.clientWidth || 300, h = box.clientHeight || 250;
+  const g = $('grab'), p = { x:14, y:14 };
+  let held = false, px = 0, py = 0;
+  g.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
+  box.addEventListener('pointerdown', function(e){
+    if(!C || C.done) return;
+    const q = careXY(e, box);
+    if(Math.abs(q.x - (p.x + SZ / 2)) < SZ && Math.abs(q.y - (p.y + SZ / 2)) < SZ){
+      held = true; px = q.x; py = q.y;
+      box.setPointerCapture(e.pointerId);
+    }
+  });
+  box.addEventListener('pointermove', function(e){
+    if(!C || C.done || !held) return;
+    const q = careXY(e, box);
+    p.x = Math.max(0, Math.min(w - SZ, p.x + q.x - px));
+    p.y = Math.max(0, Math.min(h - SZ, p.y + q.y - py));
+    px = q.x; py = q.y;
+    g.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
+    const spot = $('spot');
+    if(hits(p.x, p.y, SZ, SZ, spot)){
+      held = false;
+      /* 자리에 딱 맞춰 놓아 줍니다. 비뚤게 놓인 그릇은 "덜 한 것"처럼 보입니다 */
+      p.x = spot.offsetLeft + (spot.offsetWidth - SZ) / 2;
+      p.y = spot.offsetTop + spot.offsetHeight - SZ;
+      g.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
+      spot.hidden = true;
+      careFace('eat');
+      finishCare();
+    }
+  });
+  function up(){ held = false; }
+  box.addEventListener('pointerup', up);
+  box.addEventListener('pointercancel', up);
+}
+
+/* 물 — 병을 입에 대고 들고 있어야 찹니다. 떼면 멈춥니다 */
+function buildWater(box){
+  const SZ = 74;
+  box.innerHTML =
+    '<div class="care-ham" id="care-ham">' + art('hamster/idle', 108) + '</div>' +
+    '<div class="mouth" id="mouth"></div>' +
+    '<div class="sip" id="sip" hidden></div>' +
+    '<div class="grab" id="grab">' + art('goods/water', SZ) + '</div>';
+  const w = box.clientWidth || 300, h = box.clientHeight || 250;
+  const g = $('grab'), p = { x:12, y:12 };
+  let held = false, px = 0, py = 0;
+  g.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
+  /* 입은 햄찌 그림의 가로 한가운데, 위에서 45.5% 지점입니다 (art/hamster-idle.png 를 재서).
+     상자에서 계산하므로 햄찌를 키우거나 옮겨도 점선이 따라갑니다. */
+  const ham = $('care-ham'), m = $('mouth'), MW = 70, MH = 50;
+  m.style.width = MW + 'px'; m.style.height = MH + 'px';
+  m.style.left = (ham.offsetLeft + ham.offsetWidth * 0.5 - MW / 2) + 'px';
+  m.style.top  = (ham.offsetTop + ham.offsetHeight * 0.47 - MH / 2) + 'px';
+  const sip = $('sip');
+  sip.style.left = (ham.offsetLeft + ham.offsetWidth * 0.5 - 4) + 'px';
+  sip.style.top  = (ham.offsetTop + ham.offsetHeight * 0.455 - 16) + 'px';
+  /* 주둥이는 그림 아래 왼쪽에 달려 있습니다. 병 전체가 아니라 주둥이가 입에 닿아야 합니다 */
+  function spout(){ return { x:p.x + SZ * 0.40, y:p.y + SZ * 0.94 }; }
+  C.check = function(){
+    const m = $('mouth');
+    if(!m) return;
+    const s = spout();
+    const on = held && !C.done &&
+      s.x > m.offsetLeft && s.x < m.offsetLeft + m.offsetWidth &&
+      s.y > m.offsetTop  && s.y < m.offsetTop  + m.offsetHeight;
+    if(on === C.drink) return;
+    C.drink = on;
+    $('sip').hidden = !on;
+    careFace(on ? 'eat' : 'idle');
+  };
+  box.addEventListener('pointerdown', function(e){
+    if(!C || C.done) return;
+    const q = careXY(e, box);
+    if(Math.abs(q.x - (p.x + SZ / 2)) < SZ && Math.abs(q.y - (p.y + SZ / 2)) < SZ){
+      held = true; px = q.x; py = q.y;
+      C.check();
+      box.setPointerCapture(e.pointerId);   // 잡기는 맨 뒤에 (buildBed 와 같은 이유)
+    }
+  });
+  box.addEventListener('pointermove', function(e){
+    if(!C || C.done || !held) return;
+    const q = careXY(e, box);
+    p.x = Math.max(0, Math.min(w - SZ, p.x + q.x - px));
+    p.y = Math.max(0, Math.min(h - SZ, p.y + q.y - py));
+    px = q.x; py = q.y;
+    g.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
+    C.check();
+  });
+  function up(){ held = false; if(C) C.check(); }
+  box.addEventListener('pointerup', up);
+  box.addEventListener('pointercancel', up);
+  C.raf = requestAnimationFrame(waterTick);
+}
+function waterTick(now){
+  if(!C || !$('care-gauge')) return;
+  const dt = Math.min(64, now - (C.last || now));
+  C.last = now;
+  if(C.drink && !C.done){
+    C.gauge += dt / 30;             // 쉬지 않고 대고 있으면 3초
+    careGauge(C.gauge);
+    if(C.gauge >= 100){ finishCare(); return; }
+  }
+  C.raf = requestAnimationFrame(waterTick);
+}
+
+/* 톱밥 — 문질러 펴 바릅니다. 지나간 칸이 덮이고 더미는 작아집니다 */
+const BED_COLS = 5, BED_ROWS = 3;
+function buildBed(box){
+  let h = '<div class="care-ham" id="care-ham">' + art('hamster/idle', 108) + '</div><div class="chips" id="chips">';
+  for(let i = 0; i < BED_COLS * BED_ROWS; i++) h += '<div class="chip"><div class="on"></div></div>';
+  box.innerHTML = h + '</div><div class="grab" id="grab">' + art('goods/bed', 76) + '</div>';
+  const chips = $('chips'), g = $('grab');
+  C.cells = [].slice.call(box.querySelectorAll('.chip .on')).map(function(el){ return { el:el, v:0 }; });
+  /* 더미는 깔 자리 한가운데에. 손가락을 가리지 않게 눌러 둡니다 */
+  g.style.left = (chips.offsetLeft + chips.offsetWidth / 2 - 38) + 'px';
+  g.style.top  = (chips.offsetTop + chips.offsetHeight / 2 - 38) + 'px';
+  let down = false;
+  function rub(e){
+    if(!C || C.done || !down) return;
+    const q = careXY(e, box);
+    const fx = (q.x - chips.offsetLeft) / chips.offsetWidth;
+    const fy = (q.y - chips.offsetTop) / chips.offsetHeight;
+    let n = 0;
+    C.cells.forEach(function(c, i){
+      const cx = (i % BED_COLS + 0.5) / BED_COLS, cy = (Math.floor(i / BED_COLS) + 0.5) / BED_ROWS;
+      /* 붓이 넉넉해야 구석까지 쫓아다니지 않습니다. 틀릴 수 없는 놀이입니다 */
+      if(Math.abs(cx - fx) < 0.30 && Math.abs(cy - fy) < 0.42) c.v = 1;
+      if(c.v){ c.el.style.opacity = '1'; n++; }
+    });
+    C.gauge = n * 100 / C.cells.length;
+    careGauge(C.gauge);
+    g.style.transform = 'scale(' + (1 - 0.6 * C.gauge / 100) + ')';
+    if(n >= C.cells.length){ careFace('glad'); finishCare(); }
+  }
+  box.addEventListener('pointerdown', function(e){
+    if(!C || C.done) return;
+    down = true;
+    rub(e);
+    /* 잡기는 맨 뒤에. 이 호출이 실패하면(죽은 포인터) 그 위는 이미 다 돌아간 뒤입니다 */
+    box.setPointerCapture(e.pointerId);
+  });
+  box.addEventListener('pointermove', rub);
+  function up(){ down = false; }
+  box.addEventListener('pointerup', up);
+  box.addEventListener('pointercancel', up);
+}
+
 /* ---------- 겹화면 ----------
    겹화면이 떠 있는 동안 뒤쪽 .app 을 inert 로 꺼 둡니다. 안 그러면 미니게임 중에도
    탭 키가 뒤로 새서 '밥 주기'·'불 끄고 자기' 같은 버튼 열한 개에 닿습니다.
    hidden 이 바뀌는 자리가 여기저기라, 어느 길로 열고 닫히든 걸리게 지켜봅니다. */
-const OVERLAYS = ['work', 'intro', 'sheet', 'night', 'yay', 'ride'];
+const OVERLAYS = ['work', 'care-ov', 'intro', 'sheet', 'night', 'yay', 'ride'];
 function syncOverlays(){
   const open = OVERLAYS.filter(function(id){ const el = $(id); return el && !el.hidden; }).length > 0;
   const app = document.querySelector('.app');
@@ -3337,6 +3603,8 @@ document.addEventListener('keydown', function(e){
   if(e.key !== 'Escape') return;
   if(!$('yay').hidden){ $('yay-close').click(); return; }
   if(!$('night').hidden){ $('night-close').click(); return; }
+  /* 돌보기는 그만둬도 잃는 게 없으니 Esc 로 닫아도 됩니다 */
+  if(!$('care-ov').hidden){ stopCare(); return; }
   if(!$('sheet').hidden){
     if(location.hash) location.hash = '';
     else closeSheet();
