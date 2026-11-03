@@ -366,7 +366,10 @@
   .map{background:var(--surface); border:1px solid var(--line); border-radius:22px; padding:14px; display:flex; flex-direction:column; gap:10px}
   .node{display:flex; align-items:center; gap:12px; padding:12px; border-radius:16px; background:var(--surface-2); border:1px solid var(--line)}
   .node.here{border-color:var(--sage); border-width:2px; padding:11px}
-  .node .nm{flex:1; min-width:0; font-family:var(--font-display); font-size:19px}
+  /* flex:1 은 basis 0 이라 '남는 자리만' 받습니다. 옆의 .far 가 안 줄어드는 바람에
+     320px 에서 이름 칸이 43px 로 눌리고, keep-all 이라 '닭갈비집에서' 가 통째로
+     흘러넘쳐 옆 글자 위에 겹쳐 찍혔습니다. 제 내용 폭을 주장하게 둡니다. */
+  .node .nm{flex:1 1 auto; min-width:0; font-family:var(--font-display); font-size:19px}
   .node .sub{display:block; font-family:var(--font-body); font-size:14px; color:var(--ink-soft)}
   .pin{width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center;
        font-family:var(--font-display); font-size:15px; color:#fff; background:var(--ink-soft); flex:0 0 auto}
@@ -374,7 +377,12 @@
   .map .link{display:flex; align-items:center; gap:10px; padding-left:14px; min-height:30px}
   .map .link .bar{width:3px; align-self:stretch; min-height:26px; background:var(--line); border-radius:2px}
   .map .linkfare{font-size:13px; color:var(--ink-soft)}
-  .map .far{font-size:13px; color:var(--ink-soft); flex:0 0 auto}
+  /* 0 0 auto 면 '옆 도시를 거쳐야 해요' 117px 를 한 치도 안 내줍니다. 줄이 되게 둡니다 */
+  .map .far{font-size:13px; color:var(--ink-soft); flex:0 1 auto}
+  /* 상점 쪽 .buy 는 한 줄이어야 '가지고 있음'이 안 깨지는데, 지도에서는 '버스 200원'이
+     101px 를 붙잡고 있어서 도시 이름이 3px 넘쳤습니다. 지도에서만 두 줄을 허락합니다 —
+     단추는 71px 로 좁아지고 칸은 오히려 118px 에서 97px 로 낮아집니다. */
+  .map .buy{white-space:normal}
   .map .node.branch{margin-left:30px}
   .map .link.branch{padding-left:44px}
 
@@ -549,6 +557,8 @@
         <div class="card" id="bag"></div>
         <h2>옷장</h2>
         <div class="card">
+          <!-- 이름표가 없으면 옷장 안에 있다는 이유로 '남자 옷 / 여자 옷' 으로 읽힙니다 -->
+          <p class="lab">나는</p>
           <div class="segs" id="sex-pick"></div>
           <div class="wardrobe" id="wardrobe"></div>
         </div>
@@ -762,6 +772,11 @@ const WORKPLACE = {
   jeju:      { kind:'grove',  name:'귤밭',      start:function(){ startGyul(); } }
 };
 const SIGHT = {
+  /* 서울은 시작 도시인데 혼자 구경거리가 없었습니다. 첫날 거리가 넷뿐이고, 돈 안 쓰고
+     기분을 올리는 자리도 쓰담·간식밖에 없었습니다.
+     그림은 place/lake 를 같이 씁니다 — 인천과 강릉이 이미 place/sea 를 나눠 쓰고 있어서
+     새로 뽑지 않아도 되는 자리입니다. 한강 그림이 생기면 kind 만 바꾸면 됩니다. */
+  seoul:     { kind:'lake',  name:'한강',      sub:'강바람 쐬기',      say:'한강이 엄청 넓다!' },
   incheon:   { kind:'sea',   name:'바닷가',    sub:'파도 구경하기',    say:'바다 구경 재밌었다!' },
   chuncheon: { kind:'lake',  name:'호수',      sub:'물빛 구경하기',    say:'호수가 반짝반짝!' },
   gangneung: { kind:'sea',   name:'솔숲 바다', sub:'파도 소리 듣기',   say:'파도 소리 좋다!' },
@@ -977,7 +992,6 @@ const ART = {
   'bg/street-busan':     {name:'부산 거리',   w:1024, h:560, box:120, bg:'있음', use:'지금'},
   'bg/street-jeju':      {name:'제주 거리',   w:1024, h:560, box:120, bg:'있음', use:'지금'},
 
-
   'furniture/bed':     {name:'침대',      w:512, h:512, box:44, bg:'투명', use:'지금'},
   'furniture/desk':    {name:'책상',      w:512, h:512, box:44, bg:'투명', use:'지금'},
   'furniture/chair':   {name:'의자',      w:512, h:512, box:44, bg:'투명', use:'지금'},
@@ -1003,7 +1017,6 @@ const ART = {
 
   'stamp/chuncheon':{name:'춘천 도장',   w:512, h:512, box:62, bg:'투명', use:'지금'},
   'stamp/gangneung':{name:'강릉 도장',   w:512, h:512, box:62, bg:'투명', use:'지금'},
-
 
   'item/flour':     {name:'밀가루',   w:512, h:512, box:44, bg:'투명', use:'지금'},
   'item/butter':    {name:'버터',     w:512, h:512, box:44, bg:'투명', use:'지금'},
@@ -1190,33 +1203,14 @@ function art(id, px, half){
   if(!slot) return blankArt();
   const w = px || slot.box || 48;
   const src = ART_SRC[id];
-  const inner = src ? '<img src="' + src + '" alt="">' : placeholderFor(id);
+  /* 124칸이 전부 ART_SRC 에 있습니다. 임시 도형 열세 벌은 지웠고, 주소가 빠진 칸은
+     빈 네모로 떠서 '#art' 에서 바로 보입니다. */
+  const inner = src ? '<img src="' + src + '" alt="">' : blankArt();
   const ratio = half ? (slot.w + ' / ' + slot.w) : (slot.w + ' / ' + slot.h);
   return '<span class="art' + (half ? ' half' : '') +
     '" style="width:' + w + 'px; aspect-ratio:' + ratio + '">' + inner + '</span>';
 }
 
-/* 임시 그림. 진짜 그림이 다 들어오면 이 아래 함수들은 통째로 지웁니다. */
-function placeholderFor(id){
-  const cut = id.indexOf('/');
-  const group = id.slice(0, cut), key = id.slice(cut + 1);
-  if(group === 'hamster') return hamsterSVG(key);
-  if(group === 'item')    return itemSVG(key);
-  if(group === 'place')   return placeSVG(key);
-  if(group === 'goods')   return goodsSVG(key);
-  if(group === 'luggage') return lugSVG(lugColor(key));
-  if(group === 'fish')    return fishSVG(key);
-  if(group === 'work')    return workSVG(key);
-  if(group === 'scenery') return sceneryHTML(key);
-  if(group === 'stamp')   return stampSVG(key);
-  if(group === 'look')    return charSVG(key);
-  if(group === 'furniture') return furnSVG(key);
-  return blankArt();
-}
-function lugColor(key){
-  const c = COLORS.filter(function(x){ return x.id === key; })[0];
-  return c ? c.css : 'var(--line)';
-}
 function sceneryKind(to){
   if(to === 'incheon' || to === 'gangneung' || to === 'busan' || to === 'jeju') return 'sea';
   if(to === 'chuncheon') return 'lake';
@@ -1226,50 +1220,13 @@ function sceneryKind(to){
 function sceneryArt(to){
   const kind = sceneryKind(to);
   const src = ART_SRC['scenery/' + kind];
-  return src ? '<img src="' + src + '" alt="">' : sceneryHTML(kind);
+  return src ? '<img src="' + src + '" alt="">' : blankArt();
 }
 function blankArt(){
   return '<svg viewBox="0 0 100 100" aria-hidden="true">' +
     '<rect x="3" y="3" width="94" height="94" rx="12" fill="var(--sunk)" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 6"/>' +
     '<circle cx="36" cy="38" r="8" fill="var(--line)"/>' +
     '<path d="M24 70 l18 -22 13 15 9 -10 15 17z" fill="var(--line)"/>' +
-    '</svg>';
-}
-function goodsSVG(key){
-  const s = '<svg viewBox="0 0 60 60" aria-hidden="true">';
-  const e = '</svg>';
-  if(key === 'food')   return s + '<rect x="14" y="10" width="32" height="8" rx="3" fill="#C9A878"/><path d="M14 16 h32 v32 a5 5 0 0 1 -5 5 h-22 a5 5 0 0 1 -5 -5z" fill="#E3C79A"/><circle cx="30" cy="36" r="8" fill="#F5E8CE"/>' + e;
-  if(key === 'water')  return s + '<rect x="23" y="7" width="14" height="9" rx="3" fill="#9FC7DC"/><path d="M18 17 h24 v31 a5 5 0 0 1 -5 5 h-14 a5 5 0 0 1 -5 -5z" fill="#CDE6F2"/><rect x="18" y="30" width="24" height="11" fill="#9FC7DC"/>' + e;
-  if(key === 'bed')    return s + '<path d="M7 47 q11 -18 23 -18 t23 18z" fill="#E8D3AE"/><rect x="17" y="37" width="10" height="4" rx="2" fill="#CDB287"/><rect x="33" y="40" width="10" height="4" rx="2" fill="#CDB287"/><rect x="25" y="44" width="10" height="4" rx="2" fill="#CDB287"/>' + e;
-  if(key === 'treat')  return s + '<ellipse cx="22" cy="33" rx="7" ry="11" fill="#5F4B3A"/><ellipse cx="37" cy="29" rx="7" ry="11" fill="#6F5847"/><ellipse cx="30" cy="45" rx="7" ry="11" fill="#7D6554"/>' + e;
-  if(key === 'wheel')  return s + '<circle cx="30" cy="30" r="21" fill="none" stroke="#A9C8B6" stroke-width="5"/><path d="M30 11 V49 M11 30 H49 M17 17 L43 43 M43 17 L17 43" stroke="#A9C8B6" stroke-width="3"/><circle cx="30" cy="30" r="5" fill="#A9C8B6"/>' + e;
-  return s + '<path d="M7 48 v-11 a23 23 0 0 1 46 0 v11z" fill="#E8B8A6"/><path d="M20 48 v-11 a10 10 0 0 1 20 0 v11z" fill="#9A6E5E"/>' + e;
-}
-function furnSVG(key){
-  const s = '<svg viewBox="0 0 60 60" aria-hidden="true">';
-  const e = '</svg>';
-  if(key === 'bed')     return s + '<rect x="6" y="30" width="48" height="20" rx="4" fill="#B98E6A"/><rect x="10" y="22" width="18" height="12" rx="4" fill="#F4EDE4"/><rect x="28" y="26" width="24" height="12" rx="4" fill="#89A9C4"/><rect x="6" y="46" width="48" height="6" rx="3" fill="#9A724F"/>' + e;
-  if(key === 'desk')    return s + '<rect x="6" y="24" width="48" height="8" rx="3" fill="#C49A6C"/><rect x="10" y="32" width="6" height="20" rx="2" fill="#9A724F"/><rect x="44" y="32" width="6" height="20" rx="2" fill="#9A724F"/><rect x="30" y="32" width="18" height="14" rx="2" fill="#B5885C"/>' + e;
-  if(key === 'chair')   return s + '<rect x="17" y="14" width="26" height="22" rx="6" fill="#8FB7A2"/><rect x="15" y="34" width="30" height="7" rx="3" fill="#73A089"/><rect x="18" y="41" width="5" height="12" rx="2" fill="#73A089"/><rect x="37" y="41" width="5" height="12" rx="2" fill="#73A089"/>' + e;
-  if(key === 'plant')   return s + '<path d="M20 36 h20 l-3 17 h-14z" fill="#C97F5E"/><circle cx="30" cy="23" r="11" fill="#6FA87F"/><circle cx="21" cy="30" r="7" fill="#80BB8F"/><circle cx="39" cy="30" r="7" fill="#80BB8F"/>' + e;
-  if(key === 'rug')     return s + '<ellipse cx="30" cy="34" rx="25" ry="15" fill="#D98A7E"/><ellipse cx="30" cy="34" rx="15" ry="8" fill="#F2CDAD"/>' + e;
-  if(key === 'lamp')    return s + '<path d="M18 11 h24 l6 15 h-36z" fill="#F2D79A"/><rect x="28" y="26" width="4" height="22" fill="#9A8B74"/><ellipse cx="30" cy="50" rx="12" ry="4" fill="#9A8B74"/>' + e;
-  if(key === 'shelf')   return s + '<rect x="10" y="9" width="40" height="44" rx="4" fill="#C49A6C"/><rect x="14" y="22" width="32" height="4" fill="#9A724F"/><rect x="14" y="36" width="32" height="4" fill="#9A724F"/><rect x="17" y="12" width="5" height="10" fill="#D98A7E"/><rect x="24" y="12" width="5" height="10" fill="#89A9C4"/><rect x="17" y="26" width="5" height="10" fill="#8FB7A2"/>' + e;
-  if(key === 'cushion') return s + '<rect x="12" y="20" width="36" height="28" rx="11" fill="#E6A9A0"/><circle cx="30" cy="34" r="5" fill="#F5D6CF"/>' + e;
-  if(key === 'frame')   return s + '<rect x="9" y="13" width="42" height="32" rx="4" fill="#C49A6C"/><rect x="14" y="18" width="32" height="22" fill="#A8CBE0"/><path d="M14 33 q9 -9 16 -2 q8 6 16 -1 v10 h-32z" fill="#6FA87F"/>' + e;
-  if(key === 'lake')    return s + '<rect x="9" y="13" width="42" height="32" rx="4" fill="#9A8B74"/><rect x="14" y="18" width="32" height="22" fill="#CFE3EC"/><path d="M14 30 L22 20 L29 30 Z" fill="#8FA7A0"/><path d="M26 31 L34 19 L42 31 Z" fill="#7E968F"/><rect x="14" y="31" width="32" height="9" fill="#7FB4C9"/>' + e;
-  if(key === 'pine')    return s + '<path d="M22 38 h16 l-3 15 h-10z" fill="#C97F5E"/><path d="M30 10 l9 14 h-18z" fill="#5E8A68"/><path d="M30 19 l11 17 h-22z" fill="#6FA87F"/><path d="M30 28 l13 12 h-26z" fill="#5E8A68"/>' + e;
-  if(key === 'tile')  return s + '<path d="M6 36 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 v10 h-48z" fill="#6B6F73"/><path d="M6 26 q8 -8 16 0 q8 -8 16 0 q8 -8 16 0 v10 q-8 -8 -16 0 q-8 -8 -16 0 q-8 -8 -16 0z" fill="#7E8286"/>' + e;
-  if(key === 'fan')   return s + '<path d="M30 48 a24 24 0 0 1 -20 -34 l20 10 l20 -10 a24 24 0 0 1 -20 34z" fill="#F3EDD8" stroke="#C08359" stroke-width="2"/><path d="M30 48 v-24 M30 24 l-12 -6 M30 24 l12 -6" stroke="#C08359" stroke-width="2"/>' + e;
-  if(key === 'gullm') return s + '<path d="M6 10 h48" stroke="#9A8B74" stroke-width="2"/><path d="M14 14 q6 -6 12 0 q6 -6 12 0 q-6 -2 -12 4 q-6 -6 -12 -4z" fill="#F2F4F6" stroke="#B6C2CA" stroke-width="1.5"/><path d="M20 20 v8 M40 20 v14" stroke="#9A8B74" stroke-width="1.5"/><path d="M14 32 q6 -6 12 0 q-6 2 -12 0z" fill="#F2F4F6"/><path d="M34 38 q6 -6 12 0 q-6 2 -12 0z" fill="#F2F4F6"/>' + e;
-  if(key === 'dolm')  return s + '<ellipse cx="30" cy="34" rx="13" ry="16" fill="#7E8286"/><path d="M19 18 h22 v6 h-22z" fill="#6B6F73"/><circle cx="25" cy="31" r="2.6" fill="#4A4E52"/><circle cx="35" cy="31" r="2.6" fill="#4A4E52"/><ellipse cx="30" cy="38" rx="3.5" ry="4.5" fill="#6B6F73"/><rect x="22" y="48" width="16" height="5" rx="2" fill="#9A9EA2"/>' + e;
-  return s + '<path d="M30 10 v9" stroke="#9A8B74" stroke-width="2" fill="none"/><path d="M17 46 q13 -28 26 0z" fill="#F4DFCA"/><path d="M30 21 v25 M23 32 l7 -11 M37 32 l-7 -11" stroke="#D8BFA2" stroke-width="2" fill="none"/>' + e;
-}
-function stampSVG(key){
-  const nm = (CITIES[key] || {}).name || '';
-  return '<svg viewBox="0 0 100 100" aria-hidden="true">' +
-    '<circle cx="50" cy="50" r="43" fill="none" stroke="var(--coral)" stroke-width="4" stroke-dasharray="8 7"/>' +
-    '<text x="50" y="60" text-anchor="middle" font-family="Jua, sans-serif" font-size="30" fill="var(--coral)">' + nm + '</text>' +
     '</svg>';
 }
 
@@ -1432,106 +1389,6 @@ function charSVG(key, hairCol, mood){
   }
   s += extraArt(L.extra, L.top, L.bottom);
   return s + '</svg>';
-}
-
-/* ---------- 임시 그림 ---------- */
-function eyes(kind){
-  if(kind === 'sleep' || kind === 'eat' || kind === 'glad'){
-    return '<path d="M72 92 q8 -9 16 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>' +
-           '<path d="M112 92 q8 -9 16 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>';
-  }
-  if(kind === 'sad'){
-    return '<ellipse cx="80" cy="94" rx="6" ry="5" fill="var(--face)"/>' +
-           '<ellipse cx="120" cy="94" rx="6" ry="5" fill="var(--face)"/>';
-  }
-  return '<circle cx="80" cy="92" r="6.5" fill="var(--face)"/>' +
-         '<circle cx="120" cy="92" r="6.5" fill="var(--face)"/>' +
-         '<circle cx="82" cy="90" r="2" fill="#fff"/>' +
-         '<circle cx="122" cy="90" r="2" fill="#fff"/>';
-}
-function mouth(kind){
-  if(kind === 'eat')   return '<ellipse cx="100" cy="116" rx="9" ry="8" fill="#C4705F"/>';
-  if(kind === 'glad')  return '<path d="M88 112 q12 14 24 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>';
-  if(kind === 'sad')   return '<path d="M90 118 q10 -8 20 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>';
-  if(kind === 'sleep') return '<path d="M94 115 q6 6 12 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>';
-  return '<path d="M92 112 q8 8 16 0" fill="none" stroke="var(--face)" stroke-width="4" stroke-linecap="round"/>';
-}
-function hamsterSVG(kind){
-  const zzz = kind === 'sleep'
-    ? '<text x="156" y="48" font-family="Jua, sans-serif" font-size="22" fill="var(--ink-soft)">Z</text>' +
-      '<text x="174" y="30" font-family="Jua, sans-serif" font-size="16" fill="var(--ink-soft)">z</text>'
-    : '';
-  const spark = kind === 'glad'
-    ? '<path d="M36 52 l4 -10 4 10 10 4 -10 4 -4 10 -4 -10 -10 -4z" fill="var(--sun)"/>' +
-      '<path d="M166 72 l3 -7 3 7 7 3 -7 3 -3 7 -3 -7 -7 -3z" fill="var(--sun)"/>'
-    : '';
-  const seeds = kind === 'eat'
-    ? '<ellipse cx="100" cy="146" rx="6" ry="4" fill="var(--fur-dark)"/>'
-    : '';
-  return '<svg class="hamster' + (kind === 'glad' || kind === 'eat' ? ' bounce' : '') + '" viewBox="0 0 200 172" role="img" aria-label="햄스터">' +
-    zzz + spark +
-    '<ellipse cx="100" cy="158" rx="54" ry="8" fill="var(--sunk)"/>' +
-    '<circle cx="64" cy="58" r="17" fill="var(--fur)"/>' +
-    '<circle cx="64" cy="58" r="9" fill="var(--blush)"/>' +
-    '<circle cx="136" cy="58" r="17" fill="var(--fur)"/>' +
-    '<circle cx="136" cy="58" r="9" fill="var(--blush)"/>' +
-    '<ellipse cx="100" cy="100" rx="62" ry="54" fill="var(--fur)"/>' +
-    '<ellipse cx="100" cy="116" rx="40" ry="34" fill="var(--fur-light)"/>' +
-    '<ellipse cx="62" cy="106" rx="12" ry="9" fill="var(--blush)" opacity="0.55"/>' +
-    '<ellipse cx="138" cy="106" rx="12" ry="9" fill="var(--blush)" opacity="0.55"/>' +
-    eyes(kind) +
-    '<ellipse cx="100" cy="105" rx="5" ry="4" fill="#C4705F"/>' +
-    mouth(kind) +
-    '<ellipse cx="78" cy="150" rx="13" ry="8" fill="var(--fur-dark)"/>' +
-    '<ellipse cx="122" cy="150" rx="13" ry="8" fill="var(--fur-dark)"/>' +
-    seeds +
-    '</svg>';
-}
-function itemSVG(id){
-  const s = '<svg viewBox="0 0 60 60" width="44" height="44" aria-hidden="true">';
-  const e = '</svg>';
-  if(id === 'gimbap') return s + '<path d="M30 10 L52 48 H8 Z" fill="var(--fur-light)"/><rect x="18" y="36" width="24" height="12" rx="3" fill="#4C5F57"/>' + e;
-  if(id === 'milk')   return s + '<path d="M18 20 L30 10 L42 20 V50 H18 Z" fill="#EFF6FB"/><rect x="18" y="30" width="24" height="9" fill="var(--sky)"/>' + e;
-  if(id === 'ramen')  return s + '<path d="M16 20 H44 L40 50 H20 Z" fill="#F4E3C8"/><ellipse cx="30" cy="20" rx="15" ry="5" fill="var(--coral)"/>' + e;
-  if(id === 'choco')  return s + '<rect x="14" y="18" width="32" height="24" rx="6" fill="#7A5240"/><rect x="20" y="24" width="7" height="12" rx="2" fill="#9C6B52"/><rect x="33" y="24" width="7" height="12" rx="2" fill="#9C6B52"/>' + e;
-  if(id === 'drink')  return s + '<rect x="24" y="8" width="12" height="8" rx="2" fill="var(--sage)"/><path d="M20 18 H40 V48 a4 4 0 0 1 -4 4 H24 a4 4 0 0 1 -4 -4 Z" fill="var(--sage)" opacity="0.75"/>' + e;
-  if(id === 'flour')  return s + '<path d="M16 16 h28 v30 a5 5 0 0 1 -5 5 h-18 a5 5 0 0 1 -5 -5z" fill="#EDE4D2"/><path d="M16 16 q14 -8 28 0" fill="#DCCFB6"/><circle cx="30" cy="34" r="7" fill="#D4C5A6"/>' + e;
-  if(id === 'butter') return s + '<path d="M10 24 h34 l6 -8 h-34z" fill="#F6E08A"/><rect x="10" y="24" width="34" height="18" fill="#EFD268"/><path d="M44 24 l6 -8 v18 l-6 8z" fill="#E3C14F"/>' + e;
-  if(id === 'sugar')  return s + '<rect x="14" y="20" width="32" height="26" rx="4" fill="#F2F0EA"/><rect x="20" y="26" width="8" height="8" rx="2" fill="#DCD8CC"/><rect x="32" y="26" width="8" height="8" rx="2" fill="#DCD8CC"/><rect x="26" y="36" width="8" height="8" rx="2" fill="#DCD8CC"/>' + e;
-  if(id === 'egg')    return s + '<ellipse cx="30" cy="34" rx="15" ry="19" fill="#F7EFE2"/><ellipse cx="25" cy="28" rx="5" ry="6" fill="#FFFFFF" opacity="0.8"/>' + e;
-  if(id === 'cream')  return s + '<path d="M20 48 h20 l-2 -12 h-16z" fill="#E6DCC8"/><path d="M30 10 q10 8 8 16 q-2 8 -8 10 q-6 -2 -8 -10 q-2 -8 8 -16z" fill="#FFFBF2"/>' + e;
-  if(id === 'berry')  return s + '<path d="M30 50 q-14 -8 -14 -20 a14 14 0 0 1 28 0 q0 12 -14 20z" fill="#D9453F"/><path d="M24 14 h12 l-6 8z" fill="#5E8A68"/><circle cx="25" cy="30" r="1.8" fill="#F7E7A0"/><circle cx="34" cy="34" r="1.8" fill="#F7E7A0"/>' + e;
-  return s + '<path d="M14 36 q16 18 34 2 q-6 16 -22 16 q-14 0 -12 -18z" fill="var(--sun)"/>' + e;
-}
-
-function fishSVG(key){
-  const s = '<svg viewBox="0 0 60 60" aria-hidden="true">';
-  const e = '</svg>';
-  if(key === 'mackerel') return s + '<path d="M6 30 q14 -14 30 -8 q12 5 18 8 q-6 3 -18 8 q-16 6 -30 -8z" fill="#6E93B8"/><path d="M6 30 l-2 -9 l10 6z" fill="#51708F"/><circle cx="40" cy="28" r="2.5" fill="#1F2A33"/><path d="M16 24 q8 6 0 12" fill="none" stroke="#51708F" stroke-width="2"/>' + e;
-  if(key === 'squid')    return s + '<ellipse cx="30" cy="22" rx="13" ry="15" fill="#E3D3BE"/><path d="M20 34 q2 14 -4 18 M26 36 q-1 14 -5 17 M34 36 q1 14 5 17 M40 34 q-2 14 4 18" fill="none" stroke="#E3D3BE" stroke-width="4" stroke-linecap="round"/><circle cx="25" cy="20" r="2.2" fill="#6B5B4A"/><circle cx="35" cy="20" r="2.2" fill="#6B5B4A"/>' + e;
-  return s + '<ellipse cx="30" cy="32" rx="16" ry="12" fill="#D96A4F"/><path d="M14 26 l-8 -6 M46 26 l8 -6" stroke="#D96A4F" stroke-width="4" stroke-linecap="round"/><path d="M16 40 l-8 8 M44 40 l8 8" stroke="#D96A4F" stroke-width="3" stroke-linecap="round"/><circle cx="24" cy="28" r="2.4" fill="#2B1C16"/><circle cx="36" cy="28" r="2.4" fill="#2B1C16"/>' + e;
-}
-function placeSVG(kind){
-  const s = '<svg viewBox="0 0 56 56" width="46" height="46" aria-hidden="true">';
-  const e = '</svg>';
-  if(kind === 'store') return s + '<rect x="6" y="18" width="44" height="30" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="6" y="14" width="44" height="8" rx="4" fill="var(--sage)"/><rect x="14" y="30" width="12" height="18" rx="2" fill="var(--sky)"/>' + e;
-  if(kind === 'shop')  return s + '<rect x="6" y="18" width="44" height="30" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="6" y="14" width="44" height="8" rx="4" fill="var(--sun)"/><circle cx="36" cy="36" r="7" fill="var(--coral)"/>' + e;
-  if(kind === 'home')  return s + '<path d="M28 8 L50 26 H42 V48 H14 V26 H6 Z" fill="var(--surface-2)" stroke="var(--line)"/><rect x="23" y="34" width="10" height="14" rx="2" fill="var(--coral)"/>' + e;
-  if(kind === 'air')   return s + '<path d="M5 31 L49 21 L45 34 L17 39 Z" fill="var(--sky)"/><path d="M25 22 L33 9 L38 11 L31 25 Z" fill="var(--sky)"/><rect x="8" y="45" width="40" height="4" rx="2" fill="var(--line)"/>' + e;
-  if(kind === 'sea')   return s + '<circle cx="41" cy="15" r="7" fill="var(--sun)"/><rect x="4" y="26" width="48" height="22" rx="6" fill="var(--sky)"/><path d="M4 33 q8 -6 16 0 t16 0 t16 0" fill="none" stroke="#fff" stroke-width="3" opacity="0.75"/>' + e;
-  if(kind === 'grill') return s + '<ellipse cx="28" cy="34" rx="22" ry="13" fill="#5A5F63"/><ellipse cx="28" cy="31" rx="18" ry="10" fill="#7A8186"/><circle cx="23" cy="30" r="4" fill="#D98A5E"/><circle cx="33" cy="33" r="4" fill="#D98A5E"/><rect x="46" y="30" width="10" height="4" rx="2" fill="#5A5F63"/>' + e;
-  if(kind === 'cafe')  return s + '<rect x="6" y="18" width="44" height="30" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="6" y="14" width="44" height="8" rx="4" fill="#B98E6A"/><path d="M18 30 h14 v8 a7 7 0 0 1 -14 0z" fill="#F4F0E8"/><path d="M32 32 h4 a4 4 0 0 1 0 8 h-4" fill="none" stroke="#F4F0E8" stroke-width="3"/>' + e;
-  if(kind === 'lake')  return s + '<path d="M4 30 L18 14 L30 30 Z" fill="#8FA7A0"/><path d="M24 32 L38 12 L52 32 Z" fill="#7E968F"/><rect x="4" y="32" width="48" height="16" rx="5" fill="var(--sky)"/><path d="M6 39 q8 -5 16 0 t16 0" fill="none" stroke="#fff" stroke-width="3" opacity="0.7"/>' + e;
-  if(kind === 'bakery') return s + '<rect x="6" y="18" width="44" height="30" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="6" y="14" width="44" height="8" rx="4" fill="#E0A05C"/><path d="M16 32 q6 -8 12 0 q6 -8 12 0 q0 10 -12 10 q-12 0 -12 -10z" fill="#D9A45E"/>' + e;
-  if(kind === 'bibim')  return s + '<rect x="6" y="18" width="44" height="30" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="6" y="14" width="44" height="8" rx="4" fill="#C4553C"/><circle cx="28" cy="35" r="10" fill="#E8D9BF" stroke="#C08359" stroke-width="3"/><circle cx="25" cy="33" r="3" fill="#7FA85E"/><circle cx="31" cy="37" r="3" fill="#D9A441"/>' + e;
-  if(kind === 'market') return s + '<path d="M4 20 h52 l-4 10 h-44z" fill="#6E93B8"/><rect x="8" y="30" width="44" height="18" rx="4" fill="var(--surface-2)" stroke="var(--line)"/><path d="M14 40 q8 -6 16 0 q-8 5 -16 0z" fill="#6E93B8"/><circle cx="38" cy="39" r="4" fill="#D96A4F"/>' + e;
-  if(kind === 'grove')  return s + '<rect x="26" y="34" width="8" height="18" fill="#9A7B5B"/><circle cx="30" cy="24" r="16" fill="#6FA87F"/><circle cx="23" cy="22" r="4" fill="#F0923B"/><circle cx="36" cy="26" r="4" fill="#F0923B"/><circle cx="31" cy="16" r="4" fill="#F0923B"/>' + e;
-  if(kind === 'tomb')   return s + '<path d="M4 46 q10 -26 26 -26 q16 0 26 26z" fill="#8FB58F"/><path d="M14 46 q6 -14 16 -14 q10 0 16 14z" fill="#A3C7A0"/><circle cx="46" cy="14" r="6" fill="var(--sun)"/>' + e;
-  if(kind === 'hanok')  return s + '<path d="M4 24 q26 -14 52 0 l-4 6 q-22 -11 -44 0z" fill="#6B5A4A"/><rect x="10" y="30" width="40" height="18" fill="var(--surface-2)" stroke="var(--line)"/><rect x="18" y="34" width="10" height="14" fill="#C08359"/><rect x="32" y="34" width="10" height="14" fill="#C08359"/>' + e;
-  if(kind === 'gull')   return s + '<path d="M4 30 q12 -14 24 -2 q12 -12 24 2 q-12 -4 -24 6 q-12 -10 -24 -6z" fill="#F2F4F6" stroke="#B6C2CA" stroke-width="2"/><rect x="4" y="42" width="52" height="8" rx="4" fill="var(--sky)"/>' + e;
-  if(kind === 'dol')    return s + '<ellipse cx="30" cy="36" rx="15" ry="18" fill="#7E8286"/><path d="M18 20 h24 v6 h-24z" fill="#6B6F73"/><circle cx="24" cy="32" r="3" fill="#4A4E52"/><circle cx="36" cy="32" r="3" fill="#4A4E52"/><ellipse cx="30" cy="40" rx="4" ry="5" fill="#6B6F73"/>' + e;
-  if(kind === 'port')   return s + '<path d="M10 32 h40 l-6 14 h-28z" fill="#C9603F"/><rect x="28" y="12" width="4" height="20" fill="#9A8B74"/><path d="M32 14 h14 l-14 10z" fill="#F2F0EA"/><rect x="4" y="46" width="52" height="6" rx="3" fill="var(--sky)"/>' + e;
-  return s + '<rect x="12" y="14" width="32" height="24" rx="5" fill="var(--surface-2)" stroke="var(--line)"/><rect x="18" y="20" width="20" height="10" rx="2" fill="var(--sky)"/><circle cx="20" cy="44" r="5" fill="var(--ink-soft)"/><circle cx="36" cy="44" r="5" fill="var(--ink-soft)"/>' + e;
 }
 
 /* ---------- 도움 ---------- */
@@ -1751,62 +1608,6 @@ function drawMap(){
   box.appendChild(note);
 }
 
-function sceneryHTML(kind){
-  const sea = kind === 'sea', lake = kind === 'lake', field = kind === 'field';
-  function panel(dx){
-    let g = '<g transform="translate(' + dx + ',0)">';
-    g += '<circle cx="320" cy="56" r="26" fill="#F8DE8E"/>';
-    if(field){
-      g += '<path d="M0 200 q70 -40 150 -6 q80 -34 150 2 q60 -26 100 6 V300 H0 Z" fill="#A9CF8E"/>';
-      g += '<path d="M0 236 h400 V300 H0 Z" fill="#CBD98A"/>';
-      g += '<path d="M20 170 q34 -16 68 0 l-6 8 q-28 -11 -56 0z" fill="#6B5A4A"/>';
-      g += '<rect x="30" y="178" width="48" height="26" fill="#EFE5D3"/><rect x="44" y="186" width="9" height="18" fill="#C08359"/>';
-      g += '<path d="M250 158 q40 -18 80 0 l-7 9 q-33 -13 -66 0z" fill="#6B5A4A"/>';
-      g += '<rect x="262" y="167" width="56" height="30" fill="#EFE5D3"/><rect x="278" y="177" width="10" height="20" fill="#C08359"/>';
-      g += '<path d="M130 212 q22 -34 44 0z" fill="#8FB58F"/><path d="M186 214 q16 -24 32 0z" fill="#9CC09A"/>';
-      g += '<path d="M40 262 h320 M20 280 h360" fill="none" stroke="#B7C97A" stroke-width="4"/>';
-      g += '</g>';
-      return g;
-    }
-    if(lake){
-      g += '<path d="M0 210 L80 110 L150 210 Z" fill="#8FA7A0"/>';
-      g += '<path d="M110 215 L210 92 L300 215 Z" fill="#7E968F"/>';
-      g += '<path d="M260 212 L340 128 L400 212 Z" fill="#8FA7A0"/>';
-      g += '<path d="M0 206 q60 -22 120 -4 q70 -20 140 0 q70 -16 140 4 V300 H0 Z" fill="#8FB58F"/>';
-      g += '<path d="M60 230 l14 -34 14 34z" fill="#5E8A68"/><path d="M212 236 l12 -30 12 30z" fill="#5E8A68"/>';
-      g += '<path d="M352 232 l13 -32 13 32z" fill="#5E8A68"/>';
-      g += '<rect x="0" y="246" width="400" height="54" fill="#7FB4C9"/>';
-      g += '<path d="M0 258 q28 -9 56 0 t56 0 t56 0 t56 0 t56 0 t56 0 t56 0" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.6"/>';
-      g += '</g>';
-      return g;
-    }
-    g += '<path d="M0 232 q60 -60 120 -10 q70 -58 140 -4 q70 -44 140 6 V300 H0 Z" fill="#9BCBA8"/>';
-    g += '<rect x="30" y="150" width="46" height="86" rx="6" fill="#E6D9C7"/>';
-    g += '<rect x="86" y="178" width="38" height="58" rx="6" fill="#D8C6B1"/>';
-    g += '<rect x="250" y="160" width="52" height="76" rx="6" fill="#E6D9C7"/>';
-    g += '<circle cx="180" cy="206" r="20" fill="#7FB58C"/><rect x="176" y="216" width="8" height="24" rx="2" fill="#9A7B5B"/>';
-    g += '<circle cx="344" cy="212" r="16" fill="#7FB58C"/><rect x="341" y="220" width="7" height="20" rx="2" fill="#9A7B5B"/>';
-    if(sea){
-      g += '<rect x="0" y="254" width="400" height="46" fill="#86BBD8"/>';
-      g += '<path d="M0 262 q25 -10 50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0 t50 0" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.7"/>';
-    }
-    g += '</g>';
-    return g;
-  }
-  return '<svg viewBox="0 0 800 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' +
-    '<rect x="0" y="0" width="800" height="300" fill="#C3E2F2"/>' + panel(0) + panel(400) + '</svg>';
-}
-
-function workSVG(key){
-  const s = '<svg viewBox="0 0 60 60" aria-hidden="true">';
-  const e = '</svg>';
-  if(key === 'galbi')   return s + '<path d="M12 22 q8 -10 20 -6 q14 -6 18 8 q4 14 -10 20 q-14 7 -24 -2 q-9 -8 -4 -20z" fill="#D98A5E"/><circle cx="24" cy="30" r="4" fill="#C2704A"/><circle cx="38" cy="36" r="3" fill="#C2704A"/>' + e;
-  if(key === 'cup')     return s + '<path d="M12 20 h32 v16 a16 16 0 0 1 -32 0z" fill="#F4F0E8"/><path d="M44 24 h5 a5 5 0 0 1 0 10 h-5" fill="none" stroke="#F4F0E8" stroke-width="4"/><ellipse cx="28" cy="48" rx="16" ry="4" fill="#DDD6C8"/>' + e;
-  if(key === 'orange') return s + '<circle cx="30" cy="33" r="20" fill="#F0923B"/><path d="M30 13 q-6 -5 -12 -4 q5 5 12 4z" fill="#5E8A68"/><circle cx="23" cy="27" r="3" fill="#F7B469" opacity="0.8"/>' + e;
-  if(key === 'basket') return '<svg viewBox="0 0 60 50" aria-hidden="true"><path d="M4 14 h52 l-6 32 h-40z" fill="#C89A63"/><path d="M4 14 h52 v6 h-52z" fill="#A97F4C"/><path d="M14 20 l4 26 M26 20 l2 26 M38 20 l-2 26 M48 20 l-4 26" stroke="#A97F4C" stroke-width="2"/></svg>';
-  return s + '<path d="M14 18 h26 v20 a10 10 0 0 1 -10 10 h-6 a10 10 0 0 1 -10 -10z" fill="#CFD8DE"/><path d="M40 22 l10 -6 -2 8 -8 4z" fill="#CFD8DE"/><path d="M14 22 h26" stroke="#A8B4BC" stroke-width="3"/>' + e;
-}
-
 function travel(to){
   const fare = fareNow(S.city, to);
   if(fare <= 0 || S.money < fare || S.city === to) return;
@@ -1830,9 +1631,11 @@ function travel(to){
     save();
     render();
     go('street');
+    /* 전에는 go('hamster') 로 넘겨서 도장 말을 들려줬는데, 그러면 버스 삯을 내고
+       도착했을 때의 보상인 '그 도시 거리 그림'이 가려집니다. 축하 겹화면은 거리 위에
+       뜨므로 둘 다 보입니다. */
     if(first){
-      go('hamster');
-      say(nm + ' 도장 받았다!', 'glad', 2400);
+      showYay(nm + ' 도장 받았다!', '가방에 도장이 모여요', 'stamp/' + to, 120);
     }
   }
   const timer = setTimeout(arrive, 3200);
@@ -2413,8 +2216,13 @@ function drawHome(){
   const have = FURN.filter(function(f){ return (S.furn[f.id] || 0) > 0; });
   const lab = document.createElement('p');
   lab.className = 'lab';
-  if(!have.length) lab.textContent = '가구';
-  else lab.textContent = picked ? '빈 칸을 누르면 놓여요. 놓인 가구를 누르면 도로 가져옵니다.' : '놓을 가구를 고르세요';
+  /* 가진 가구를 전부 방에 놓으면 트레이가 다 꺼지는데, 전에는 그때도 '고르세요'라고
+     했습니다. 화면이 할 수 없는 일을 시키고, 도로 가져오는 법은 어디에도 없었습니다. */
+  const freeAny = have.filter(function(f){ return freeCount(f.id) > 0; }).length;
+  if(!have.length)    lab.textContent = '가구';
+  else if(picked)     lab.textContent = '빈 칸을 누르면 놓여요. 놓인 가구를 누르면 도로 가져옵니다.';
+  else if(!freeAny)   lab.textContent = '가구를 다 놓았어요. 놓인 가구를 누르면 도로 가져옵니다.';
+  else                lab.textContent = '놓을 가구를 고르세요';
   trayWrap.appendChild(lab);
   if(!have.length){
     const p = document.createElement('p');
@@ -2704,15 +2512,6 @@ function finishWork(){
 }
 
 /* ---------- 공항 미니게임 (C계열) ---------- */
-function lugSVG(color){
-  return '<svg viewBox="0 0 56 56" width="56" height="56" aria-hidden="true">' +
-    '<rect x="21" y="5" width="14" height="11" rx="4" fill="none" stroke="' + color + '" stroke-width="4"/>' +
-    '<rect x="5" y="16" width="46" height="34" rx="9" fill="' + color + '"/>' +
-    '<rect x="5" y="28" width="46" height="6" fill="rgba(255,255,255,0.5)"/>' +
-    '<circle cx="16" cy="42" r="3" fill="rgba(255,255,255,0.65)"/>' +
-    '<circle cx="40" cy="42" r="3" fill="rgba(255,255,255,0.65)"/>' +
-    '</svg>';
-}
 
 let A = null;
 const AIR_TOTAL = 12;
@@ -3188,6 +2987,9 @@ function latteMove(e){
 function latteUp(){
   if(!L || !L.pouring) return;
   L.pouring = false; L.tilt = 0;
+  /* 끌지 않고 톡 누르기만 해도 여기로 옵니다. 그대로 판정하면 한 방울도 안 부은 잔이
+     '덜 찼어요'로 사라집니다 — 새 화면을 두드려 보는 2학년이 세 번에 일을 끝냅니다. */
+  if(L.level < 1){ drawCup(); return; }
   judgeCup();
 }
 function drawCup(){
@@ -3424,6 +3226,9 @@ function buildGyul(){
 }
 function gyulMove(e){
   if(!Y) return;
+  /* 손가락은 닿아 있을 때만 pointermove 가 나오지만, 마우스는 그냥 지나가도 나옵니다.
+     어른이 노트북에서 확인할 때 잎 위를 지나가기만 해도 귤이 떨어졌습니다. */
+  if(e.pointerType === 'mouse' && !e.buttons) return;
   const r = e.currentTarget.getBoundingClientRect();
   const x = e.clientX - r.left, y = e.clientY - r.top;
   Y.bx = Math.max(35, Math.min(Y.w - 35, x));
