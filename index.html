@@ -525,6 +525,19 @@
   /* 쓰담 — 햄찌를 가운데 크게. transform 대신 음수 margin 으로 가운데를 잡습니다.
      transform 을 쓰면 offsetLeft 가 안 따라와서 "손가락이 햄찌 위인가" 판정이 어긋납니다. */
   .care-ham.big{right:auto; bottom:auto; left:50%; top:50%; width:150px; margin-left:-75px; margin-top:-65px}
+  /* 쳇바퀴 — 손가락으로 빙글빙글. PNG 는 안 돌립니다 — 비스듬히 그려져 있고 받침대가
+     붙어 있어서 통째로 돌리면 받침대까지 돕니다. 대신 햄찌가 바퀴 앞에서 통통 뜁니다. */
+  .wheel{position:absolute; left:50%; top:50%; width:170px; margin-left:-85px; margin-top:-85px;
+         pointer-events:none}
+  .runner{position:absolute; left:50%; top:50%; width:64px; margin-left:-32px; margin-top:-14px;
+          pointer-events:none}
+  .runner.run{animation:run .22s linear infinite}
+  @keyframes run{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  /* 터널 — 보기만 합니다 */
+  .tube{position:absolute; left:50%; top:50%; width:180px; margin-left:-90px; margin-top:-90px;
+        pointer-events:none}
+  .diver{position:absolute; left:0; top:50%; width:58px; margin-top:-4px; pointer-events:none;
+         transition:transform .4s ease-in-out, opacity .15s linear}
   /* 간식 — 씨 더미를 톡톡. 두드릴 때마다 한 자밤이 햄찌 입으로 날아가고 더미가 작아집니다 */
   .pile{position:absolute; left:26px; top:50%; margin-top:-45px; width:90px;
         pointer-events:none; transition:transform .18s}
@@ -918,7 +931,7 @@ const TUNE_DEF = {
   airLock: 600,
   /* 돌보기 넷. 일하기와 달리 하루 제한이 없어서, 길면 지겨워지고 짧으면 싱겁습니다.
      밥 주기는 끌어다 놓는 한 동작이라 맞출 숫자가 없습니다. */
-  petLen: 700, waterMs: 3000, bedBrush: 0.30, mouthW: 70, treatN: 5
+  petLen: 700, waterMs: 3000, bedBrush: 0.30, mouthW: 70, treatN: 5, wheelTurns: 3
 };
 const TUNE = Object.assign({}, TUNE_DEF);
 try{
@@ -946,7 +959,8 @@ const TUNE_KNOBS = [
   ['waterMs',     '물 다 마시는 시간',      'ms', 250,  '줄이면 빨리 찹니다'],
   ['bedBrush',    '톱밥 붓 넓이',           '',   0.01, '늘리면 한 번에 넓게 깔립니다'],
   ['mouthW',      '물병 닿는 폭',           'px', 4,    '늘리면 입에 대기 쉬워집니다'],
-  ['treatN',      '간식 두드리는 횟수',     '번', 1,    '줄이면 빨리 끝납니다']
+  ['treatN',      '간식 두드리는 횟수',     '번', 1,    '줄이면 빨리 끝납니다'],
+  ['wheelTurns',  '쳇바퀴 돌리는 바퀴 수',  '바퀴', 1,  '줄이면 빨리 끝납니다']
 ];
 
 /* 저장 모양이 바뀌어도 열리게 맞춰 놓습니다. 집은 CITIES를 보고 채우므로
@@ -1532,18 +1546,8 @@ function drawCare(){
   box.appendChild(careButton('톱밥 갈기', S.inv.bed + '개',   function(){ startCare('bed'); }));
   play.appendChild(playButton('쓰담', function(){ startCare('pet'); }, task === 'played'));
   play.appendChild(playButton('간식 ' + S.inv.treat, function(){ startCare('treat'); }));
-  if(S.owns.wheel){
-    play.appendChild(playButton('쳇바퀴', function(){
-      S.mood = clamp(S.mood + 15); S.today.played = true;
-      say('다다다다다!', 'glad'); after();
-    }));
-  }
-  if(S.owns.tunnel){
-    play.appendChild(playButton('터널', function(){
-      S.mood = clamp(S.mood + 15); S.today.played = true;
-      say('쏙 들어갔다 쏙!', 'glad'); after();
-    }));
-  }
+  if(S.owns.wheel)  play.appendChild(playButton('쳇바퀴', function(){ startCare('wheel'); }));
+  if(S.owns.tunnel) play.appendChild(playButton('터널',   function(){ startCare('tunnel'); }));
 }
 
 function drawPlaces(){
@@ -3385,6 +3389,18 @@ const CARE = {
     none:T.noTreat, say:['볼주머니에 쏙!', 'eat'], bar:true, build:buildTreat,
     done:function(){ S.mood = clamp(S.mood + 20); S.hunger = clamp(S.hunger + 10); S.today.played = true; }
   },
+  /* 쳇바퀴·터널은 한 번 사면 계속 쓰는 것이라 free 입니다. S.inv 가 아니라 S.owns 에
+     있고, 버튼 자체가 가진 사람한테만 보입니다. */
+  wheel: {
+    title:'쳇바퀴',   hint:'바퀴를 손가락으로 빙글빙글 돌려 주세요',
+    free:true,      say:['다다다다다!', 'glad'], bar:true, build:buildWheel,
+    done:function(){ S.mood = clamp(S.mood + 15); S.today.played = true; }
+  },
+  tunnel: {
+    title:'터널',     hint:'햄찌가 터널을 지나갑니다',
+    free:true,      say:['쏙 들어갔다 쏙!', 'glad'], bar:false, build:buildTunnel,
+    done:function(){ S.mood = clamp(S.mood + 15); S.today.played = true; }
+  },
   /* 쓰담만 free 입니다 — 물건을 안 쓰고 몇 번이든 할 수 있습니다. 그래서 제일 짧습니다 */
   pet: {
     title:'쓰담',    hint:'햄찌를 손가락으로 살살 문질러 주세요',
@@ -3419,10 +3435,13 @@ function finishCare(){
   if(C.raf){ cancelAnimationFrame(C.raf); C.raf = 0; }
   const q = $('care-quit');
   if(q) q.disabled = true;          // 다 한 뒤에 물리면 공짜가 됩니다
-  const v = C.v, kind = C.kind;
-  /* 0.9초는 보여주는 시간입니다. 바로 닫으면 햄찌가 먹는 걸 못 봅니다 */
+  const v = C.v, kind = C.kind, mine = C;
+  /* 0.9초는 보여주는 시간입니다. 바로 닫으면 햄찌가 먹는 걸 못 봅니다.
+     기다리는 사이에 Esc 로 나가고 다른 돌보기를 열 수 있습니다. 그때 'C 가 있나'만
+     보면 새로 연 쪽을 이 타이머가 가로챕니다 — 물 주기를 열었는데 0.9초 뒤 화면이
+     저절로 닫히고 밥이 대신 줄었습니다. 그래서 '그때 그 판인가'로 봅니다. */
   setTimeout(function(){
-    if(!C) return;
+    if(C !== mine) return;
     C = null;
     $('care-ov').hidden = true;
     if(!v.free) S.inv[kind]--;
@@ -3503,6 +3522,84 @@ function buildFeed(box){
 function hamMouth(ham){
   return { x: ham.offsetLeft + ham.offsetWidth * 0.5,
            y: ham.offsetTop + ham.offsetHeight * 0.47 };
+}
+
+/* 쳇바퀴 — 손가락으로 빙글빙글 돌립니다.
+   돈 각도를 더합니다. 시계든 반시계든 **절대값**으로 세니 방향을 안 따집니다 —
+   2학년한테 "오른쪽으로 돌리세요"는 틀릴 거리를 하나 더 만드는 것입니다.
+   가운데 가까이에서는 각도가 확 튀어서, 반지름이 WHEEL_MIN_R 보다 클 때만 셉니다.
+   바퀴 그림은 안 돌립니다(받침대까지 돕니다). 달리는 것은 햄찌가 보여줍니다. */
+const WHEEL_MIN_R = 22;
+function buildWheel(box){
+  box.innerHTML =
+    '<div class="wheel" id="wheel">' + art('goods/wheel', 170) + '</div>' +
+    '<div class="runner" id="care-ham">' + art('hamster/idle', 64) + '</div>';
+  const wh = $('wheel'), run = $('care-ham');
+  const cx = wh.offsetLeft + wh.offsetWidth / 2, cy = wh.offsetTop + wh.offsetHeight / 2;
+  let down = false, last = 0, turned = 0, idle = 0;
+  function ang(q){ return Math.atan2(q.y - cy, q.x - cx); }
+  box.addEventListener('pointerdown', function(e){
+    if(!C || C.done) return;
+    down = true;
+    last = ang(careXY(e, box));
+    box.setPointerCapture(e.pointerId);
+  });
+  box.addEventListener('pointermove', function(e){
+    if(!C || C.done || !down) return;
+    const q = careXY(e, box);
+    const dx = q.x - cx, dy = q.y - cy;
+    if(Math.sqrt(dx * dx + dy * dy) < WHEEL_MIN_R) return;
+    const a = ang(q);
+    let d = a - last;
+    while(d >  Math.PI) d -= 2 * Math.PI;    // -π..π 로 접어 넣습니다
+    while(d < -Math.PI) d += 2 * Math.PI;
+    last = a;
+    turned += Math.abs(d);
+    /* 손이 멈추면 햄찌도 멈춥니다 */
+    run.classList.add('run');
+    clearTimeout(idle);
+    idle = setTimeout(function(){ run.classList.remove('run'); }, 220);
+    /* 각도를 백 번 넘게 더하다 보면 6π 에 머리카락만큼 못 미칩니다. 그대로 두면
+       막대는 꽉 찼는데 안 끝나는 자리가 생깁니다 — 0.01rad(0.6도)는 안 보입니다.
+       다른 넷은 게이지가 정수(두드린 횟수·칸 수)라 이 틈이 없습니다. */
+    const need = TUNE.wheelTurns * 2 * Math.PI;
+    C.gauge = turned * 100 / need;
+    careGauge(C.gauge);
+    if(turned >= need - 0.01){ clearTimeout(idle); run.classList.remove('run'); finishCare(); }
+  });
+  function up(){ down = false; }
+  box.addEventListener('pointerup', up);
+  box.addEventListener('pointercancel', up);
+}
+
+/* 터널 — 보기만 합니다.
+   손으로 할 자연스러운 동작이 없습니다. 두드리기는 간식과, 끌어 넣기는 밥과 겹칩니다.
+   억지로 손놀림을 붙이면 여섯 중 둘이 같은 동작이 되니 짧은 연출로 뒀습니다. */
+function buildTunnel(box){
+  box.innerHTML =
+    '<div class="tube" id="tube">' + art('goods/tunnel', 180) + '</div>' +
+    '<div class="diver" id="care-ham">' + art('hamster/idle', 58) + '</div>';
+  const d = $('care-ham'), tube = $('tube');
+  const inX  = tube.offsetLeft + 4;
+  const outX = tube.offsetLeft + tube.offsetWidth - 62;
+  function at(x){ d.style.transform = 'translateX(' + x + 'px)'; }
+  at(inX - 76);
+  void d.offsetWidth;                       // 자리를 굳혀야 transition 이 걸립니다
+  at(inX);                                  // 왼쪽 구멍으로 들어갑니다
+  setTimeout(function(){ d.style.opacity = '0'; }, 400);
+  setTimeout(function(){
+    /* 터널 속을 지나는 동안 반대편으로 옮겨 둡니다. 옮기는 것은 안 보여야 하므로
+       transition 을 잠깐 끕니다 */
+    d.style.transition = 'none';
+    at(outX);
+    void d.offsetWidth;
+    d.style.transition = '';
+    d.style.opacity = '1';
+  }, 560);
+  setTimeout(function(){ at(outX + 76); }, 620);
+  /* 연출 도중에 나가고 터널을 다시 열면, 이 타이머가 새 판을 끝내 버립니다 */
+  const mine = C;
+  setTimeout(function(){ if(C === mine && !C.done) finishCare(); }, 1050);
 }
 
 /* 간식 — 씨 더미를 톡톡 두드립니다.
