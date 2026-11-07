@@ -525,6 +525,11 @@
   /* 쓰담 — 햄찌를 가운데 크게. transform 대신 음수 margin 으로 가운데를 잡습니다.
      transform 을 쓰면 offsetLeft 가 안 따라와서 "손가락이 햄찌 위인가" 판정이 어긋납니다. */
   .care-ham.big{right:auto; bottom:auto; left:50%; top:50%; width:150px; margin-left:-75px; margin-top:-65px}
+  /* 간식 — 씨 더미를 톡톡. 두드릴 때마다 한 자밤이 햄찌 입으로 날아가고 더미가 작아집니다 */
+  .pile{position:absolute; left:26px; top:50%; margin-top:-45px; width:90px;
+        pointer-events:none; transition:transform .18s}
+  .seed{position:absolute; left:0; top:0; width:18px; height:18px; pointer-events:none}
+  .seed.fly{transition:transform .45s cubic-bezier(.3,-0.2,.7,1), opacity .45s ease-in; opacity:0}
   .pop-heart{position:absolute; width:22px; height:22px; pointer-events:none;
              animation:heartup .9s ease-out forwards}
   @keyframes heartup{
@@ -913,7 +918,7 @@ const TUNE_DEF = {
   airLock: 600,
   /* 돌보기 넷. 일하기와 달리 하루 제한이 없어서, 길면 지겨워지고 짧으면 싱겁습니다.
      밥 주기는 끌어다 놓는 한 동작이라 맞출 숫자가 없습니다. */
-  petLen: 700, waterMs: 3000, bedBrush: 0.30, mouthW: 70
+  petLen: 700, waterMs: 3000, bedBrush: 0.30, mouthW: 70, treatN: 5
 };
 const TUNE = Object.assign({}, TUNE_DEF);
 try{
@@ -940,7 +945,8 @@ const TUNE_KNOBS = [
   ['petLen',      '쓰담 문지르는 거리',     'px', 50,   '줄이면 빨리 끝납니다'],
   ['waterMs',     '물 다 마시는 시간',      'ms', 250,  '줄이면 빨리 찹니다'],
   ['bedBrush',    '톱밥 붓 넓이',           '',   0.01, '늘리면 한 번에 넓게 깔립니다'],
-  ['mouthW',      '물병 닿는 폭',           'px', 4,    '늘리면 입에 대기 쉬워집니다']
+  ['mouthW',      '물병 닿는 폭',           'px', 4,    '늘리면 입에 대기 쉬워집니다'],
+  ['treatN',      '간식 두드리는 횟수',     '번', 1,    '줄이면 빨리 끝납니다']
 ];
 
 /* 저장 모양이 바뀌어도 열리게 맞춰 놓습니다. 집은 CITIES를 보고 채우므로
@@ -1525,11 +1531,7 @@ function drawCare(){
   box.appendChild(careButton('물 주기',   S.inv.water + '개', function(){ startCare('water'); }));
   box.appendChild(careButton('톱밥 갈기', S.inv.bed + '개',   function(){ startCare('bed'); }));
   play.appendChild(playButton('쓰담', function(){ startCare('pet'); }, task === 'played'));
-  play.appendChild(playButton('간식 ' + S.inv.treat, function(){
-    if(S.inv.treat <= 0){ say(T.noTreat, null); return; }
-    S.inv.treat--; S.mood = clamp(S.mood + 20); S.hunger = clamp(S.hunger + 10); S.today.played = true;
-    say('볼주머니에 쏙!', 'eat'); after();
-  }));
+  play.appendChild(playButton('간식 ' + S.inv.treat, function(){ startCare('treat'); }));
   if(S.owns.wheel){
     play.appendChild(playButton('쳇바퀴', function(){
       S.mood = clamp(S.mood + 15); S.today.played = true;
@@ -3378,6 +3380,11 @@ const CARE = {
     none:T.noBed,   say:['폭신폭신해졌다', 'glad'], bar:true, build:buildBed,
     done:function(){ S.bed = 100; S.mood = clamp(S.mood + 6); }
   },
+  treat: {
+    title:'간식 주기', hint:'해바라기씨 더미를 톡톡 두드려 햄찌에게 주세요',
+    none:T.noTreat, say:['볼주머니에 쏙!', 'eat'], bar:true, build:buildTreat,
+    done:function(){ S.mood = clamp(S.mood + 20); S.hunger = clamp(S.hunger + 10); S.today.played = true; }
+  },
   /* 쓰담만 free 입니다 — 물건을 안 쓰고 몇 번이든 할 수 있습니다. 그래서 제일 짧습니다 */
   pet: {
     title:'쓰담',    hint:'햄찌를 손가락으로 살살 문질러 주세요',
@@ -3490,6 +3497,57 @@ function buildFeed(box){
   box.addEventListener('pointercancel', up);
 }
 
+/* 햄찌 입이 상자 안 어디인가. art/hamster-idle.png 을 재서 가로 한가운데, 위에서 47%.
+   물 주기의 점선·물방울과 간식의 날아가는 자리가 같이 씁니다 — 세 군데에 따로 적었더니
+   점선은 0.47 인데 물방울만 0.455 로 남아 있었습니다. */
+function hamMouth(ham){
+  return { x: ham.offsetLeft + ham.offsetWidth * 0.5,
+           y: ham.offsetTop + ham.offsetHeight * 0.47 };
+}
+
+/* 간식 — 씨 더미를 톡톡 두드립니다.
+   다섯 손놀림 중 혼자 '콕 찍는' 것입니다. 끌기(밥)·들고 있기(물)·문지르기(톱밥·쓰담)가
+   다 이어진 동작이라, 간식까지 그렇게 하면 다섯이 뭉개집니다.
+   goods/treat 는 낱알이 아니라 더미라서 흩어 놓을 수가 없습니다. 그래서 더미는 그대로
+   두고, 두드릴 때마다 한 자밤(같은 그림을 18px 로)이 날아가고 더미가 작아집니다. */
+function buildTreat(box){
+  box.innerHTML =
+    '<div class="care-ham" id="care-ham">' + art('hamster/idle', 108) + '</div>' +
+    '<div class="pile" id="pile">' + art('goods/treat', 90) + '</div>';
+  const ham = $('care-ham'), pile = $('pile');
+  let given = 0;
+  function fly(x, y){
+    const s = document.createElement('div');
+    s.className = 'seed';
+    s.innerHTML = art('goods/treat', 18);
+    s.style.transform = 'translate(' + (x - 9) + 'px,' + (y - 9) + 'px)';
+    box.appendChild(s);
+    /* 자리를 한 번 굳혀야 transition 이 걸립니다. 안 그러면 브라우저가 처음부터
+       도착점에 있던 것으로 쳐서 그냥 사라집니다 (shakeBin 과 같은 수). */
+    void s.offsetWidth;
+    const m = hamMouth(ham);
+    s.classList.add('fly');
+    s.style.transform = 'translate(' + (m.x - 9) + 'px,' + (m.y - 9) + 'px) scale(.5)';
+    setTimeout(function(){ s.remove(); }, 500);
+  }
+  box.addEventListener('pointerdown', function(e){
+    if(!C || C.done) return;
+    const q = careXY(e, box);
+    /* 더미가 크고 가만히 있어서 넉넉히 잡아도 됩니다. 빗나가도 잃는 게 없으니
+       meatGrab 같은 조절값을 안 뒀습니다 — 다시 두드리면 그만입니다. */
+    const pad = 14;
+    if(q.x < pile.offsetLeft - pad || q.x > pile.offsetLeft + pile.offsetWidth + pad ||
+       q.y < pile.offsetTop - pad  || q.y > pile.offsetTop + pile.offsetHeight + pad) return;
+    given++;
+    fly(q.x, q.y);
+    C.gauge = given * 100 / TUNE.treatN;
+    careGauge(C.gauge);
+    pile.style.transform = 'scale(' + (1 - 0.7 * Math.min(1, C.gauge / 100)) + ')';
+    careFace('eat');
+    if(given >= TUNE.treatN) finishCare();
+  });
+}
+
 /* 물 — 병을 입에 대고 들고 있어야 찹니다. 떼면 멈춥니다 */
 function buildWater(box){
   const SZ = 74;
@@ -3502,18 +3560,16 @@ function buildWater(box){
   const g = $('grab'), p = { x:12, y:12 };
   let held = false, px = 0, py = 0;
   g.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
-  /* 입은 햄찌 그림의 가로 한가운데, 위에서 45.5% 지점입니다 (art/hamster-idle.png 를 재서).
-     상자에서 계산하므로 햄찌를 키우거나 옮겨도 점선이 따라갑니다. */
   /* 닿는 폭은 #tune 의 mouthW. 높이는 그 비율(5/7)을 따라갑니다 — 숫자를 둘 두면
      한쪽만 고쳐서 동그라미가 찌그러집니다. */
-  const ham = $('care-ham'), m = $('mouth');
+  const ham = $('care-ham'), m = $('mouth'), mo = hamMouth(ham);
   const MW = TUNE.mouthW, MH = Math.round(TUNE.mouthW * 5 / 7);
   m.style.width = MW + 'px'; m.style.height = MH + 'px';
-  m.style.left = (ham.offsetLeft + ham.offsetWidth * 0.5 - MW / 2) + 'px';
-  m.style.top  = (ham.offsetTop + ham.offsetHeight * 0.47 - MH / 2) + 'px';
+  m.style.left = (mo.x - MW / 2) + 'px';
+  m.style.top  = (mo.y - MH / 2) + 'px';
   const sip = $('sip');
-  sip.style.left = (ham.offsetLeft + ham.offsetWidth * 0.5 - 4) + 'px';
-  sip.style.top  = (ham.offsetTop + ham.offsetHeight * 0.455 - 16) + 'px';
+  sip.style.left = (mo.x - 4) + 'px';
+  sip.style.top  = (mo.y - 16) + 'px';
   /* 주둥이는 그림 아래 왼쪽에 달려 있습니다. 병 전체가 아니라 주둥이가 입에 닿아야 합니다 */
   function spout(){ return { x:p.x + SZ * 0.40, y:p.y + SZ * 0.94 }; }
   C.check = function(){
